@@ -23,6 +23,8 @@ The living version of this plan is a Claude Doc. This file is a copy for the rep
 | 3D | 2D main view plus one 3D view | A 3D scene of a hurricane landfall (surge and terrain) |
 | Stack | Vite + TypeScript + Calcite | |
 | UI style | Frutiger Aero frosted glass, with an ambient layer that follows the visitor's weather | See "UI design" below |
+| Screens | Landing page, then Radar mode and Outage risk mode with a toggle at the top | See "Screens" below |
+| Accounts | Optional and free: saved places, alerts, saved layer setups | Supabase Auth recommended, provider not yet chosen |
 | Google Maps | Free features only: Maps URLs links, an optional Embed page | Never drawn on the ArcGIS map, per Google's terms |
 | Refresh | GitHub Action every 1 to 6 hours | |
 | DNS | codyparham.com is on Cloudflare | The Pages CNAME and the R2 custom domain are both set there |
@@ -193,22 +195,92 @@ A 0 to 100 index per H3 hex (resolution 6 nationally, 8 in the demo region), rol
 - **Vulnerability (20%):** tree canopy, the county's historical outage rate from EAGLE-I, and distance to a substation.
 - **v2:** a gradient-boosted model trained on past storms, compared with the index on a backtest page.
 
-## Features
+## Screens
 
-- Live view: NWS warnings, NHC cones, SPC outlooks, and risk hexes over the grid.
-- Storm history: pick a past storm and replay its track with a time slider, showing actual outages next to the modeled risk.
-- Scenario mode: a scripted fake hurricane for demos.
-- Asset impact: a sortable table of at-risk substations and lines, with CSV export.
-- County report popup with a printable PDF.
+StormX has a landing page and two map modes. A toggle at the top of the map switches between the modes and keeps the place and time the visitor is looking at.
+
+### Landing page
+
+- The StormX name and a logo (design to be decided later).
+- Two large glass buttons: **View radar** and **View outage map**. The choice is remembered for next time.
+- Sign in and the About page are linked from here.
+
+### Radar mode
+
+A national weather radar and forecast app.
+
+- **Default view:** the whole U.S. Light and dark modes follow the device setting, with a manual switch. They use the Esri Light Gray and Dark Gray Canvas basemaps and Calcite's light and dark themes.
+- **Radar:** the NOAA MRMS loop (last 4 hours, 5-minute steps) with play, pause and a time slider.
+- **Overlays:** NWS warnings, watches and advisories; SPC severe outlooks; NHC storms and cones; the winter storm severity index.
+- **Forecast button:** opens a glass popup that asks for a ZIP code or "Use my location". It shows current conditions, the next 24 hours and 7 days from the NWS API, plus any active alerts for that point. ZIPs become coordinates through the Census ZCTA Gazetteer file (about 33,000 centroids, kept as a static JSON on R2), so there is no geocoding API or key.
+- **Fire:**
+    - Active incidents and perimeters from NIFC (the Esri live layer `USA_Wildfires_v1` has both, and WFIGS is the direct source).
+    - Satellite hotspots from NASA FIRMS (VIIRS and MODIS, updated about every 3 hours). FIRMS needs a free `MAP_KEY`, so the ETL fetches it and caches it on R2, and the key never reaches the browser.
+    - Smoke plumes from the NOAA Hazard Mapping System (daily polygons).
+    - Red flag warnings (already in the NWS layer) and the SPC fire weather outlook.
+    - The fire popup shows name, size, containment, start date and the last update time.
+
+### Outage risk mode
+
+A closer look at utility outage risk.
+
+- **Default view:** zoomed in on the visitor's location (with permission), a ZIP they type, or a saved place if they are signed in. Without any of these it opens on the Gulf Coast demo region.
+- **Layers, grouped in the layer list:**
+    - **Current outages:** ORNL ODIN, county, ZIP or polygon counts every 15 minutes (see below).
+    - **Power grid:** transmission lines by voltage and substations.
+    - **Weather now:** radar, NWS warnings including tornado and severe thunderstorm watches, and fire.
+    - **Risk:** the live H3 risk index, and a historical risk heatmap (outage frequency per county from EAGLE-I, 2014 to 2025).
+    - **Outage history:** pick a past storm or date range and replay EAGLE-I county outages on the time slider.
+    - **Simulated utility:** the fictional Gulf Coast utility's feeders, customers and outage tickets.
+- **Real vs. simulated:** every layer is tagged **Real** or **Simulated** in the layer list, the legend and each popup. Simulated layers use a hatched or dashed style and a "Simulated data" ribbon, so the two can't be confused in a screenshot.
+- Also here: the asset impact table with CSV export, county popups with the printable PDF, and scenario mode.
+
+### Live outage data: ORNL ODIN
+
+[ODIN](https://odin.ornl.gov/) (Outage Data Initiative Nationwide) collects outage reports that utilities submit to ORNL. Checked on 2026-10-20:
+
+- `https://odin.ornl.gov/odi/status` lists the 157 reporting utilities with their EIA ID, total customers out and the time of the last report. 75 had outages at the time of checking, about 16,700 customers in all.
+- `https://odin.ornl.gov/odi/map?scale=COUNTY` (also `STATE`) returns outage areas with the geometry, county FIPS, customers out (`metersOut`), customers served (`metersServed`) and utility name. 131 utilities report by county, 10 by ZIP, 11 by point, 4 by polygon and 1 by H3.
+- **Limits:** coverage is only the utilities that take part, not the whole country, so the map says "Reported by participating utilities". These are the endpoints ODIN's own public map uses, and they send no CORS header, so the ETL fetches them every 15 minutes and writes GeoJSON to R2. Before launch, email odin@ornl.gov to confirm that reuse with credit is fine.
+- Nationwide live outage sites such as PowerOutage.us are paid and forbid scraping, so they are not used.
+
+### Accounts (free)
+
+Signing in is optional and free. Everything above works without an account.
+
+**What an account adds:**
+
+- Saved places (home, family, work) that open the outage map and the forecast popup in one tap.
+- Alerts by email when a saved place gets an NWS warning or its risk reaches High.
+- Saved layer setups, plus theme and "Effects off" preferences, synced across devices.
+
+**Recommended setup: Supabase Auth**
+
+- The owner already uses Supabase for RExplorer.
+- The free plan covers 50,000 monthly users, and sign-in works from a static GitHub Pages site.
+- Sign-in methods: Google, GitHub, and an emailed magic link. There are no passwords to store.
+- User data lives in Postgres tables locked by row-level security, so each user can only read their own rows.
+- Alert emails go through Resend's free tier (3,000 a month), because Supabase's built-in email is rate limited.
+- User management runs from the Supabase dashboard: list users, disable a user, or delete a user. An `is_admin` flag gates the scenario editor.
+- Watch-outs: free Supabase projects pause after a week without activity (the ETL Action's ping prevents that), and the free plan allows two projects (RExplorer uses one).
+- Alternatives:
+    - **Firebase Auth:** also free at this scale and never pauses, but it means a second backend.
+    - **Clerk:** polished sign-in screens, 10,000 monthly users free.
+- Privacy: store only the email, display name and saved places. Add a "Delete my account" button and a short privacy page.
+
+**Also on the site**
+
+- The weather-reactive glass UI on all screens.
 - One 3D landfall view.
-- About page covering methods, data lineage and architecture.
+- The About page covering methods, data lineage and architecture.
 
 ## Roadmap
 
-1. **Foundation:** the repo, Pages with the custom domain, the R2 bucket with CORS, an ArcGIS key and basemap, and grid layers on the map.
-2. **Storm history:** past storm picker, track playback slider, and an EAGLE-I outage overlay.
-3. **Live risk:** the ETL Action writing to R2, NWS/NHC/SPC feeds, the H3 risk layer, and county popups.
-4. **Showcase:** scenario mode, the ML model and backtest, the 3D view, the About page, and mobile polish.
+1. **Foundation:** the repo, Pages with the custom domain, the R2 bucket with CORS, the ArcGIS key and basemaps, the landing page, the mode toggle, glass panels, and light and dark modes.
+2. **Radar mode:** the MRMS radar loop, NWS alerts, SPC and NHC layers, the forecast popup with ZIP or location, and the fire layers.
+3. **Outage risk mode:** grid layers, ODIN current outages, the EAGLE-I history and heatmap, the ETL Action, the H3 risk layer, county popups, and the simulated utility with Real and Simulated tags.
+4. **Accounts:** sign-in, saved places, saved layer setups, and email alerts.
+5. **Showcase:** scenario mode, the ML model and backtest, the 3D view, the weather-reactive effects, the logo, the About page, and mobile polish.
 
 ## Setup steps (owner)
 
@@ -218,3 +290,6 @@ A 0 to 100 index per H3 hex (resolution 6 nationally, 8 in the demo region), rol
 - [ ] Create an R2 API token (Object Read & Write, this bucket only) and add these repo Actions secrets: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`.
 - [ ] Create an ArcGIS Location Platform API key with basemap access only, restricted by referrer to `storms.codyparham.com` and `localhost`.
 - [ ] Add a Cloudflare DNS CNAME `storms` that points to `codyparham94.github.io` with the proxy off, then set the custom domain in the repo's Pages settings.
+- [ ] Register for a free NASA FIRMS `MAP_KEY` (firms.modaps.eosdis.nasa.gov/api/map_key) and add it as the `FIRMS_MAP_KEY` Actions secret.
+- [ ] Pick the login provider (Supabase recommended). For Supabase, create the project and add Google and GitHub OAuth apps. For alert emails, make a free Resend account.
+- [ ] Email odin@ornl.gov to confirm StormX may show ODIN outage data with credit.
