@@ -50,7 +50,7 @@ The ArcGIS API key is restricted by referrer to storms.codyparham.com, so it is 
 
 ## Data sources
 
-Checked on 2026-10-20 by fetching each link the owner supplied. The Rutgers server could not be checked (see below).
+Checked on 2026-10-20 by fetching each link the owner supplied. The Rutgers server is down (it did not load for the owner either), so it is dropped.
 
 ### Outage history: ORNL EAGLE-I
 
@@ -76,13 +76,13 @@ HIFLD Open, the original public home for this data, has been retired. The three 
 | --- | --- | --- |
 | [FWS: US Electric Power Transmission Lines](https://gis-fws.opendata.arcgis.com/datasets/fws::us-electric-power-transmission-lines/about) | **Verified, best source for lines.** Hosted feature service: `https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/US_Electric_Power_Transmission_Lines/FeatureServer/0` | 94,619 polylines (all U.S. and territories, Web Mercator). Data last edited 2025-08-26, and the newest `SOURCEDATE` is 2024-09-26 |
 | [Data Rescue Project: HIFLD Open Transmission Lines](https://portal.datarescueproject.org/datasets/hifld-open-transmission-lines/) | **Verified, backup.** Archived 2025-08-26, 77 MB, downloadable from [DataLumos project 240591](https://www.datalumos.org/datalumos/project/240591/version/V1/view) | The same HIFLD transmission lines feature class/shapefile. Lines only, no substations. DataLumos may need a free ICPSR login, and it blocked our automated fetch |
-| [Rutgers HIFLD MapServer](https://oceandata.rad.rutgers.edu/arcgis/rest/services/RenewableEnergy/HIFLD_Electric_SubstationsTransmissionLines/MapServer) | **Not verified.** The server's TLS chain ends at the emSign root, which this build environment does not trust, and a second fetch returned HTTP 503 | By its name, HIFLD substations and lines. It is a MapServer, so feature export may be capped or turned off. It is still the only candidate for **substations**, so check it from a browser before relying on it |
+| [Rutgers HIFLD MapServer](https://oceandata.rad.rutgers.edu/arcgis/rest/services/RenewableEnergy/HIFLD_Electric_SubstationsTransmissionLines/MapServer) | **Dropped.** It returned HTTP 503 here, and it did not load for the owner on 2026-10-20 | Not used |
 
 - **FWS fields:** `ID, TYPE` (overhead/underground, AC/DC), `STATUS, OWNER, VOLTAGE` (kV, `-999999` when unknown), `VOLT_CLASS, INFERRED, SUB_1, SUB_2` (end substation names), `SOURCE, SOURCEDATE, VAL_METHOD, VAL_DATE, NAICS_CODE, NAICS_DESC`, and length.
 - **Voltage mix:** 44,665 segments at 100 to 161 kV, 30,348 under 100 kV, 7,305 at 220 to 287 kV, 2,602 at 345 kV, 815 at 500 kV, 46 at 735 kV and above, 14 DC, and 8,822 unknown.
 - **Formats:** queries return JSON, GeoJSON and PBF, 2,000 features per page, and the service allows Extract. The ETL pages through it once, clips it to CONUS and writes PMTiles to R2. The app does not call the FWS service live.
 - **License:** a U.S. government work with an FWS no-warranty disclaimer, and no other restrictions. The UI credits "HIFLD via USFWS".
-- **Substations:** the Rutgers service still needs checking. A verified fallback is a community copy of HIFLD substations (77,946 points, see More sources below). Other options are OpenStreetMap `power=substation` (ODbL, needs attribution) or the `SUB_1`/`SUB_2` line endpoints.
+- **Substations:** the main source is a community copy of HIFLD substations (77,946 points, see More sources below), snapshotted to R2. Spot-check it against OpenStreetMap `power=substation` (ODbL, needs attribution) in the Gulf Coast demo region, and use the `SUB_1`/`SUB_2` line endpoints to flag substations missing from either.
 
 ### Live weather radar
 
@@ -110,7 +110,7 @@ RainViewer's free API also answered, but its free tier is limited and meant for 
 | [NIFC WFIGS current fire perimeters](https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0) | 108 active perimeters on 2026-10-20 | Wildfire hazard and public-safety shutoff context |
 | [USGS NWIS instantaneous values](https://waterservices.usgs.gov/nwis/iv/) | Live river gauge heights | Flooding near substations |
 | [OpenFEMA Disaster Declarations](https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries) | Declarations by county, type and date | Labels for past storms, and a ground truth for v2 |
-| [HIFLD substations (community copy)](https://services6.arcgis.com/OO2s4OoyCZkYJ6oE/arcgis/rest/services/Substations/FeatureServer/0) | 77,946 points with NAME, STATE, COUNTYFIPS, LINES, MAX_VOLT, MIN_VOLT, STATUS. Data dated 2022-02-13 | **Substations fallback** if Rutgers stays down. It is a personal re-upload, so snapshot it to R2 and credit HIFLD |
+| [HIFLD substations (community copy)](https://services6.arcgis.com/OO2s4OoyCZkYJ6oE/arcgis/rest/services/Substations/FeatureServer/0) | 77,946 points with NAME, STATE, COUNTYFIPS, LINES, MAX_VOLT, MIN_VOLT, STATUS. Data dated 2022-02-13 | **Main substations source.** It is a personal re-upload that could disappear, so snapshot it to R2 on first run and credit HIFLD |
 | FEMA National Risk Index | County and tract risk scores by hazard | Vulnerability term. The download host refused the connection, so not yet checked |
 
 ### Reuse from rexplorer-src
