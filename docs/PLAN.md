@@ -22,6 +22,8 @@ The living version of this plan is a Claude Doc. This file is a copy for the rep
 | Cost | Strictly free, with usage caps on | Data self-hosted on R2, and Esri calls limited to basemaps |
 | 3D | 2D main view plus one 3D view | A 3D scene of a hurricane landfall (surge and terrain) |
 | Stack | Vite + TypeScript + Calcite | |
+| UI style | Frutiger Aero frosted glass, with an ambient layer that follows the visitor's weather | See "UI design" below |
+| Google Maps | Free features only: Maps URLs links, an optional Embed page | Never drawn on the ArcGIS map, per Google's terms |
 | Refresh | GitHub Action every 1 to 6 hours | |
 | DNS | codyparham.com is on Cloudflare | The Pages CNAME and the R2 custom domain are both set there |
 | Must-have UI | Time slider, track playback, layer list, risk legend, county popups, printable PDF | The PDF is built in the browser (screenshot + jsPDF), with no paid print service |
@@ -129,6 +131,58 @@ The owner's RExplorer project covers Montgomery County, Tennessee, so its data d
 | Census TIGER + ACS | Boundaries, households, population | Exposure and customer estimates. Reuse the RExplorer extractor |
 | HIFLD / EIA-861 service territories | Utility service areas | Who is affected |
 | Synthetic | Fictional Gulf Coast utility: feeders, customers, outage tickets | Utility operations demo, labeled "simulated" in the UI |
+
+## Google Maps (free features)
+
+Google's terms forbid showing Google Maps content "with or near a non-Google map" (no Places data on a non-Google map, no Street View on the same screen as one). The main map is ArcGIS, so Google features live in links and on a separate page, never on top of the ArcGIS map. Checked against [Google's pricing](https://developers.google.com/maps/billing-and-pricing/pricing) and [terms](https://cloud.google.com/maps-platform/terms) on 2026-10-20.
+
+| Feature | Cost | How StormX uses it |
+| --- | --- | --- |
+| [Maps URLs](https://developers.google.com/maps/documentation/urls/get-started) | Free, no key, no billing account | "Open in Google Maps" and "Street View here" links in every substation, line and county popup. Opens in a new tab. **Ships in v1** |
+| [Maps Embed API](https://developers.google.com/maps/documentation/embed/get-started) | Unlimited free (needs a key and a billing account) | A separate "Street-level" page with an embedded Street View of the selected asset, plus a "satellite now" view. Optional |
+| Street View Metadata | Unlimited free | Checks whether imagery exists before showing the Street View link |
+| Static Street View | 10,000 free a month | A thumbnail on the Street-level page only (never next to the ArcGIS map) |
+| Weather API | 10,000 free a month | **Not used.** Its terms bar using it in an app whose main purpose is weather. NWS covers the same need for free |
+| Air Quality API | 10,000 free a month | Optional later: its terms allow "environmental risk indices", which could add wildfire smoke to the risk model |
+
+Every paid Google API needs a Cloud billing account with a card, even inside the free caps, so set a budget alert and per-API quotas if the owner turns on Embed. Maps URLs need neither.
+
+## UI design: frosted glass that follows the weather
+
+A Frutiger Aero take on Apple-style frosted glass. Translucent, glossy panels float over the map, and a light ambient layer behind them reacts to the weather where the visitor is.
+
+**Look**
+
+- Panels: `backdrop-filter: blur(20px) saturate(160%)`, a white tint of 55 to 70% so text keeps WCAG AA contrast, a 1 px inner highlight on the top edge, soft shadows and 16 to 20 px corners. Calcite components are themed through their CSS variables instead of rebuilt.
+- Frutiger Aero details: aqua-to-sky-blue and fresh-green gradients, glossy pill buttons with a top shine, gentle bubbles and lens glints, and nature imagery. The risk colors stay a separate, colorblind-safe scale so the theme never changes what the data says.
+- Type and motion: SF Pro on Apple devices and Inter elsewhere. Springy 200 to 300 ms transitions.
+
+**Weather where the visitor is**
+
+1. Ask for browser location only when the visitor taps "Match my weather". Without it, use the map's center.
+2. Look up the nearest station with `api.weather.gov/points/{lat},{lon}`, then read `/stations/{id}/observations/latest` (`textDescription`, `presentWeather`). The NWS API is free, needs no key, and sends `Access-Control-Allow-Origin: *` (checked 2026-10-20). Refresh every 15 minutes.
+3. Work out day or night from the sun's position (calculated in the browser) and the season from the date and latitude.
+
+| Condition | Ambient effect |
+| --- | --- |
+| Rain or drizzle | Raindrops running down the glass panels, with a light ripple on the panel edges |
+| Thunderstorm | Rain plus a rare soft lightning flash (no rapid flashing) |
+| Snow or ice | Slow snowflakes and a frosted rim on the panels |
+| Clear, day | A warm sunlight glow and lens glint off the panel edges |
+| Clear, night | A deep blue gradient with a few twinkling stars |
+| Cloudy or fog | Slow drifting cloud wisps and more blur |
+| Wind (gusts over 25 mph) | Particles and wisps drift faster at an angle |
+| Calm in autumn | Falling leaves |
+| Calm in spring | Drifting petals and Aero bubbles |
+| Calm in summer | Light sun glow and bubbles |
+| Calm in winter | Cool tint and faint frost |
+
+**Rules**
+
+- One canvas layer behind the panels, never over the map data. It stays under 2% of a frame on a mid-range phone, pauses when the tab is hidden, and has fewer particles on mobile.
+- `prefers-reduced-motion` and an "Effects off" toggle show a still version of the same theme.
+- The weather effect is decoration. Risk, alerts and radar always come from the map layers.
+- Planned in Phase 4 (Showcase), with the glass panels themselves in Phase 1.
 
 ## Risk model (v1)
 
