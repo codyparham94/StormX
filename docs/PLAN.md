@@ -78,18 +78,55 @@ HIFLD Open, the original public home for this data, has been retired. The three 
 - **Voltage mix:** 44,665 segments at 100 to 161 kV, 30,348 under 100 kV, 7,305 at 220 to 287 kV, 2,602 at 345 kV, 815 at 500 kV, 46 at 735 kV and above, 14 DC, and 8,822 unknown.
 - **Formats:** queries return JSON, GeoJSON and PBF, 2,000 features per page, and the service allows Extract. The ETL pages through it once, clips it to CONUS and writes PMTiles to R2. The app does not call the FWS service live.
 - **License:** a U.S. government work with an FWS no-warranty disclaimer, and no other restrictions. The UI credits "HIFLD via USFWS".
-- **Gap:** substations still need a verified source. The options are the Rutgers service (once checked), the `SUB_1`/`SUB_2` line endpoints as approximate points, or an OpenStreetMap `power=substation` extract (ODbL, needs attribution).
+- **Substations:** the Rutgers service still needs checking. A verified fallback is a community copy of HIFLD substations (77,946 points, see More sources below). Other options are OpenStreetMap `power=substation` (ODbL, needs attribution) or the `SUB_1`/`SUB_2` line endpoints.
+
+### Live weather radar
+
+Nothing is needed from the owner: no key, account or payment. All three options below answered from this environment on 2026-10-20.
+
+| Source | What it is | How the app uses it |
+| --- | --- | --- |
+| [NOAA MRMS base reflectivity (time-enabled)](https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity_time/ImageServer) | ArcGIS ImageServer of the national WSR-88D mosaic. Updates every 5 minutes, keeps a 4-hour moving window. CONUS, Alaska, Hawaii, the Caribbean and Guam. Its CORS headers allow `storms.codyparham.com` | **Primary.** An `ImageryLayer` in the SDK, tied to the time slider for a radar loop. Public domain |
+| [Iowa Environmental Mesonet NEXRAD tiles](https://mesonet.agron.iastate.edu/ogc/) | Web Mercator XYZ PNG tiles (`/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png`), 5-minute steps, `Access-Control-Allow-Origin: *` | **Fallback** `WebTileLayer` if the NOAA service is down |
+| [NOAA nowCOAST WMS](https://nowcoast.noaa.gov/geoserver/observations/weather_radar/ows?service=WMS&request=GetCapabilities) | WMS layers for CONUS, Alaska, Hawaii and Caribbean reflectivity mosaics | Second fallback as a `WMSLayer` |
+
+RainViewer's free API also answered, but its free tier is limited and meant for personal use, so it is left out.
+
+### More sources (reachable on 2026-10-20)
+
+| Source | What it gives us | Role |
+| --- | --- | --- |
+| [NWS watches, warnings and advisories](https://mapservices.weather.noaa.gov/eventdriven/rest/services/WWA/watch_warn_adv/FeatureServer) | Live polygons as a FeatureServer, next to the [NWS API](https://api.weather.gov/alerts/active) (GeoJSON) | Live alerts layer, no ETL needed |
+| [SPC outlooks](https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/SPC_wx_outlks/FeatureServer) and [Day 1 GeoJSON](https://www.spc.noaa.gov/products/outlook/day1otlk_cat.nolyr.geojson) | Day 1 to 8 convective outlooks, also tornado, wind and hail probabilities | Future severe weather |
+| [WPC Winter Storm Severity Index](https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/wpc_wssi/MapServer) | Forecast winter storm impact levels | Winter and ice hazard |
+| [NDFD temperature](https://mapservices.weather.noaa.gov/raster/rest/services/NDFD/NDFD_temp/MapServer) | Forecast temperature grids | Heat and cold stress. Wind gust and ice still need the NDFD GRIB2 files |
+| [NHC CurrentStorms.json](https://www.nhc.noaa.gov/CurrentStorms.json) | Active tropical systems with links to their GIS files | Live hurricanes |
+| [IBTrACS v04r01 CSV](https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/) | Global best tracks with wind radii | Past hurricanes |
+| [NOAA Storm Events CSV](https://www.ncei.noaa.gov/pub/data/swdi/stormevents/csvfiles/) | Yearly event, location and fatality files | Past severe storms, joined to EAGLE-I by county and date |
+| [NIFC WFIGS current fire perimeters](https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0) | 108 active perimeters on 2026-10-20 | Wildfire hazard and public-safety shutoff context |
+| [USGS NWIS instantaneous values](https://waterservices.usgs.gov/nwis/iv/) | Live river gauge heights | Flooding near substations |
+| [OpenFEMA Disaster Declarations](https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries) | Declarations by county, type and date | Labels for past storms, and a ground truth for v2 |
+| [HIFLD substations (community copy)](https://services6.arcgis.com/OO2s4OoyCZkYJ6oE/arcgis/rest/services/Substations/FeatureServer/0) | 77,946 points with NAME, STATE, COUNTYFIPS, LINES, MAX_VOLT, MIN_VOLT, STATUS. Data dated 2022-02-13 | **Substations fallback** if Rutgers stays down. It is a personal re-upload, so snapshot it to R2 and credit HIFLD |
+| FEMA National Risk Index | County and tract risk scores by hazard | Vulnerability term. The download host refused the connection, so not yet checked |
+
+### Reuse from rexplorer-src
+
+The owner's RExplorer project covers Montgomery County, Tennessee, so its data does not cover CONUS. Its pipeline code and Cloudflare setup are reusable as they stand.
+
+- **`pipelines/rexplorer_pipeline/census.py`:** the ACS 5-year extractor (population, households, income, housing, with margins of error) plus LODES jobs. Widen `AREA_COUNTIES` from one county to all states, and request tracts and counties instead of block groups. It uses the `CENSUS_API_KEY` secret, which the owner already has.
+- **`arcgis.py`:** pages any ArcGIS feature layer by object-ID ranges and yields GeoJSON in EPSG:4326. It fits the FWS lines, the substations and the fire perimeters.
+- **`checks.py`:** a weekly check that every source still answers and still has the expected fields. It fits the many feeds here.
+- **`tiles.py` and `apps/tiles-worker` (ADR 0006):** tippecanoe to PMTiles on R2, served by a Cloudflare Worker with CORS locked to the site. This is the same pattern StormX plans for the grid and H3 layers.
+- **TIGERweb layers** (counties, tracts, block groups) and **3DEP terrain** reading (`terrain.py`) for the 3D landfall view.
 
 ### Other sources (planned, not yet verified)
 
 | Source | What it gives us | Role |
 | --- | --- | --- |
 | NOAA NHC GIS, IBTrACS, HURDAT2 | Hurricane tracks, wind radii, forecast cones | Past and future hurricanes |
-| NWS API (api.weather.gov) | Active warnings and watches as GeoJSON | Live alerts |
 | NOAA Storm Events Database | Tornado, hail, wind, ice, flood events | Past severe storms |
-| SPC outlooks and storm reports | Day 1 to 3 convective risk | Future severe weather |
 | NDFD / NBM grids | Forecast wind gust, ice, snow, temperature | Main hazard driver |
-| Census TIGER + ACS | Boundaries, households, population | Exposure and customer estimates |
+| Census TIGER + ACS | Boundaries, households, population | Exposure and customer estimates. Reuse the RExplorer extractor |
 | HIFLD / EIA-861 service territories | Utility service areas | Who is affected |
 | Synthetic | Fictional Gulf Coast utility: feeders, customers, outage tickets | Utility operations demo, labeled "simulated" in the UI |
 
