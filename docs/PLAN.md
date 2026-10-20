@@ -24,7 +24,7 @@ The living version of this plan is a Claude Doc. This file is a copy for the rep
 | Stack | Vite + TypeScript + Calcite | |
 | UI style | Frutiger Aero frosted glass, with an ambient layer that follows the visitor's weather | See "UI design" below |
 | Screens | Landing page, then Radar mode and Outage risk mode with a toggle at the top | See "Screens" below |
-| Accounts | Optional and free: saved places, alerts, saved layer setups | Supabase Auth recommended, provider not yet chosen |
+| Accounts | Optional and free: saved places, alerts, saved layer setups | Supabase Auth (chosen 2026-10-20) |
 | Google Maps | Free features only: Maps URLs links, an optional Embed page | Never drawn on the ArcGIS map, per Google's terms |
 | Refresh | GitHub Action every 1 to 6 hours | |
 | DNS | codyparham.com is on Cloudflare | The Pages CNAME and the R2 custom domain are both set there |
@@ -254,7 +254,7 @@ Signing in is optional and free. Everything above works without an account.
 - Alerts by email when a saved place gets an NWS warning or its risk reaches High.
 - Saved layer setups, plus theme and "Effects off" preferences, synced across devices.
 
-**Recommended setup: Supabase Auth**
+**Provider: Supabase Auth (chosen by the owner on 2026-10-20)**
 
 - The owner already uses Supabase for RExplorer.
 - The free plan covers 50,000 monthly users, and sign-in works from a static GitHub Pages site.
@@ -291,5 +291,5 @@ Signing in is optional and free. Everything above works without an account.
 - [ ] Create an ArcGIS Location Platform API key with basemap access only, restricted by referrer to `storms.codyparham.com` and `localhost`.
 - [ ] Add a Cloudflare DNS CNAME `storms` that points to `codyparham94.github.io` with the proxy off, then set the custom domain in the repo's Pages settings.
 - [ ] Register for a free NASA FIRMS `MAP_KEY` (firms.modaps.eosdis.nasa.gov/api/map_key) and add it as the `FIRMS_MAP_KEY` Actions secret.
-- [ ] Pick the login provider (Supabase recommended). For Supabase, create the project and add Google and GitHub OAuth apps. For alert emails, make a free Resend account.
+- [ ] Create the project and add Google and GitHub OAuth apps. For alert emails, make a free Resend account.
 - [ ] Email odin@ornl.gov to confirm StormX may show ODIN outage data with credit.
