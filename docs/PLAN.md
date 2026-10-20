@@ -291,5 +291,5 @@ Signing in is optional and free. Everything above works without an account.
 - [ ] Create an ArcGIS Location Platform API key with basemap access only, restricted by referrer to `storms.codyparham.com` and `localhost`.
 - [ ] Add a Cloudflare DNS CNAME `storms` that points to `codyparham94.github.io` with the proxy off, then set the custom domain in the repo's Pages settings.
 - [ ] Register for a free NASA FIRMS `MAP_KEY` (firms.modaps.eosdis.nasa.gov/api/map_key) and add it as the `FIRMS_MAP_KEY` Actions secret.
-- [ ] Create the project and add Google and GitHub OAuth apps. For alert emails, make a free Resend account.
+- [ ] Create a Supabase project for StormX and add Google and GitHub OAuth apps. For alert emails, make a free Resend account.
 - [ ] Email odin@ornl.gov to confirm StormX may show ODIN outage data with credit.
