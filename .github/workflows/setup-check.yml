@@ -1,0 +1,119 @@
+name: Setup check
+
+# Confirms the owner's setup steps in docs/PLAN.md from inside GitHub Actions, where the secrets
+# are readable: each secret and variable exists, the R2 key can write to the bucket, the ArcGIS key
+# works only from the site, the FIRMS key is active, Supabase has GitHub and Google sign-in, and
+# the data Worker answers with CORS for the site. Never prints a value. Missing items show as
+# warnings, so the run stays green; read the summary.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: [".github/workflows/setup-check.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      SITE: https://stormx.codyparham.com
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
+      ARCGIS_API_KEY: ${{ secrets.ARCGIS_API_KEY }}
+      FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_URL_IS_SECRET: ${{ secrets.SUPABASE_URL != '' }}
+      SUPABASE_KEY_IS_SECRET: ${{ secrets.SUPABASE_ANON_KEY != '' }}
+      R2_BUCKET_IS_SECRET: ${{ secrets.R2_BUCKET != '' }}
+      DATA_BASE_URL: ${{ vars.DATA_BASE_URL }}
+    steps:
+      - name: Check
+        run: |
+          summary="$GITHUB_STEP_SUMMARY"
+          echo "| Check | Result |" >> "$summary"
+          echo "| --- | --- |" >> "$summary"
+          row() { echo "| $1 | $2 |" >> "$summary"; echo "$1: $2"; }
+          warn() { row "$1" "⚠️ $2"; echo "::warning title=$1::$2"; }
+          ok() { row "$1" "✅ $2"; }
+
+          for name in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY ARCGIS_API_KEY FIRMS_MAP_KEY CLOUDFLARE_API_TOKEN; do
+            if [ -n "${!name}" ]; then ok "secret $name" "set"; else warn "secret $name" "missing"; fi
+          done
+          if [ -n "$R2_BUCKET" ]; then
+            [ "$R2_BUCKET" = stormx-data ] && ok "R2_BUCKET" "stormx-data ($([ "$R2_BUCKET_IS_SECRET" = true ] && echo secret || echo variable))" \
+              || warn "R2_BUCKET" "set, but not stormx-data (workers/data/wrangler.toml expects stormx-data)"
+          else
+            warn "R2_BUCKET" "missing (secret or variable)"
+          fi
+          for name in SUPABASE_URL SUPABASE_ANON_KEY; do
+            if [ -z "${!name}" ]; then warn "variable $name" "missing"; continue; fi
+            flag="SUPABASE_URL_IS_SECRET"; [ "$name" = SUPABASE_ANON_KEY ] && flag="SUPABASE_KEY_IS_SECRET"
+            if [ "${!flag}" = true ]; then ok "variable $name" "set (as a secret; the deploy reads variables, so add it under Variables too)"; else ok "variable $name" "set"; fi
+          done
+          if [ -n "$DATA_BASE_URL" ]; then ok "variable DATA_BASE_URL" "$DATA_BASE_URL"; else warn "variable DATA_BASE_URL" "not set yet (set it to the data Worker URL after its first deploy)"; fi
+
+          # R2: the key can reach the bucket and write. healthz.json stays as the Worker's health file.
+          if [ -n "$R2_ACCOUNT_ID" ] && [ -n "$R2_ACCESS_KEY_ID" ] && [ -n "$R2_SECRET_ACCESS_KEY" ] && [ -n "$R2_BUCKET" ]; then
+            export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" AWS_DEFAULT_REGION=auto
+            endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+            if err=$(aws s3api head-bucket --bucket "$R2_BUCKET" --endpoint-url "$endpoint" 2>&1); then ok "R2 bucket reachable" "yes"; else warn "R2 bucket reachable" "no: $(echo "$err" | tail -1 | cut -c1-160)"; fi
+            printf '{"ok":true,"checked":"%s"}\n' "$(date -u +%FT%TZ)" > healthz.json
+            if err=$(aws s3api put-object --bucket "$R2_BUCKET" --key healthz.json --body healthz.json --content-type application/json --endpoint-url "$endpoint" 2>&1); then ok "R2 write" "wrote healthz.json"; else warn "R2 write" "failed: $(echo "$err" | tail -1 | cut -c1-160)"; fi
+            if cors=$(aws s3api get-bucket-cors --bucket "$R2_BUCKET" --endpoint-url "$endpoint" --query 'CORSRules[].AllowedOrigins[]' --output text 2>&1); then
+              ok "R2 CORS origins" "$(echo $cors) (only used if the bucket is read directly; the Worker sets its own CORS)"
+            else
+              row "R2 CORS rule" "not readable with an object-only token, which is fine: the Worker sets CORS"
+            fi
+          else
+            warn "R2" "skipped: account ID, key or bucket missing"
+          fi
+
+          # ArcGIS: works with the site as referrer, refused without one (proves the referrer restriction).
+          if [ -n "$ARCGIS_API_KEY" ]; then
+            url="https://basemapstyles-api.arcgis.com/arcgis/rest/services/styles/v2/styles/arcgis/light-gray?token=${ARCGIS_API_KEY}"
+            with=$(curl -s -o with.json -w '%{http_code}' -H "Referer: $SITE/" "$url")
+            without=$(curl -s -o without.json -w '%{http_code}' "$url")
+            good=no; [ "$with" = 200 ] && ! grep -q '"error"' with.json && good=yes
+            refused=no; { [ "$without" != 200 ] || grep -q '"error"' without.json; } && refused=yes
+            if [ $good = yes ]; then ok "ArcGIS key from the site" "basemap style loads"; else warn "ArcGIS key from the site" "refused (HTTP $with): check basemap privileges and the referrer list"; fi
+            if [ $refused = yes ]; then ok "ArcGIS referrer restriction" "refused without the site's referrer"; else warn "ArcGIS referrer restriction" "the key works from anywhere: add referrer restrictions"; fi
+            hl=$(curl -s -o /dev/null -w '%{http_code}' -H "Referer: http://localhost:5173/" "$url")
+            [ "$hl" = 200 ] && ok "ArcGIS key from localhost" "works" || row "ArcGIS key from localhost" "refused (HTTP $hl); add http://localhost:5173 for local dev if wanted"
+          fi
+
+          # NASA FIRMS key status.
+          if [ -n "$FIRMS_MAP_KEY" ]; then
+            body=$(curl -s "https://firms.modaps.eosdis.nasa.gov/mapserver/mapkey_status/?MAP_KEY=${FIRMS_MAP_KEY}")
+            if echo "$body" | jq -e '.transaction_limit' >/dev/null 2>&1; then ok "FIRMS key" "active, limit $(echo "$body" | jq -r '.transaction_limit') per 10 minutes"; else warn "FIRMS key" "not accepted"; fi
+          fi
+
+          # Supabase: the project answers and has GitHub and Google sign-in turned on.
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+            settings=$(curl -s -H "apikey: $SUPABASE_ANON_KEY" "${SUPABASE_URL%/}/auth/v1/settings")
+            if echo "$settings" | jq -e '.external' >/dev/null 2>&1; then
+              ok "Supabase project" "answers"
+              for p in github google email; do
+                [ "$(echo "$settings" | jq -r ".external.$p")" = true ] && ok "Supabase sign-in: $p" "on" || warn "Supabase sign-in: $p" "off"
+              done
+            else
+              warn "Supabase project" "no auth settings returned: check the URL and anon key"
+            fi
+          fi
+
+          # Data Worker: answers with CORS for the site.
+          if [ -n "$DATA_BASE_URL" ]; then
+            acao=$(curl -s -D - -o /dev/null -H "Origin: $SITE" "${DATA_BASE_URL%/}/healthz.json" | tr -d '\r' | awk -F': ' 'tolower($1)=="access-control-allow-origin"{print $2}')
+            [ "$acao" = "$SITE" ] && ok "Data Worker CORS" "healthz.json allowed for $SITE" || warn "Data Worker CORS" "no CORS grant for $SITE"
+          fi
+
+          # Site: the custom domain serves over HTTPS.
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$SITE/")
+          [ "$code" = 200 ] && ok "Site over HTTPS" "$SITE answers" || warn "Site over HTTPS" "HTTP $code"
+          redirect=$(curl -s -o /dev/null -w '%{redirect_url}' "http://stormx.codyparham.com/")
+          [ "${redirect#https://}" != "$redirect" ] && ok "Enforce HTTPS" "on" || warn "Enforce HTTPS" "off: tick it in Settings > Pages"

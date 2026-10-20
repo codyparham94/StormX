@@ -1,6 +1,6 @@
 # StormX project plan
 
-StormX is a static map webapp at [storms.codyparham.com](https://storms.codyparham.com). It shows past and forecast storms over the U.S. power grid and scores where utility outages are likely. It is a GIS portfolio piece built on free tiers: ArcGIS Maps SDK for JavaScript, GitHub Pages for hosting, and Cloudflare R2 for data.
+StormX is a static map webapp at [stormx.codyparham.com](https://stormx.codyparham.com). It shows past and forecast storms over the U.S. power grid and scores where utility outages are likely. It is a GIS portfolio piece built on free tiers: ArcGIS Maps SDK for JavaScript, GitHub Pages for hosting, and Cloudflare R2 for data.
 
 The living version of this plan is a Claude Doc. This file is a copy for the repo.
 
@@ -27,7 +27,7 @@ The living version of this plan is a Claude Doc. This file is a copy for the rep
 | Accounts | Optional and free: saved places, alerts, saved layer setups | Supabase Auth (chosen 2026-10-20) |
 | Google Maps | Free features only: Maps URLs links, an optional Embed page | Never drawn on the ArcGIS map, per Google's terms |
 | Refresh | GitHub Action every 1 to 6 hours | |
-| DNS | codyparham.com is on Cloudflare | The Pages CNAME and the R2 custom domain are both set there |
+| DNS | codyparham.com stays on Squarespace DNS (checked 2026-10-20) | The `stormx` CNAME lives there. R2 custom domains need Cloudflare DNS, so a Cloudflare Worker on workers.dev serves the bucket instead (owner's choice, 2026-10-20) |
 | Must-have UI | Time slider, track playback, layer list, risk legend, county popups, printable PDF | The PDF is built in the browser (screenshot + jsPDF), with no paid print service |
 | Write-up | Yes | Page covering methods, data lineage and architecture |
 | Deadline | None | Phases are not dated |
@@ -37,16 +37,20 @@ The living version of this plan is a Claude Doc. This file is a copy for the rep
 ```
 Weather feeds (NHC, SPC, NDFD, NWS) ─┐
 Grid (HIFLD lines, substations)      ─┤
-Outage + storm history (EAGLE-I,     ─┼─> GitHub Actions ETL ──upload──> Cloudflare R2 (data.codyparham.com)
+Outage + storm history (EAGLE-I,     ─┼─> GitHub Actions ETL ──upload──> Cloudflare R2 bucket stormx-data (private)
   Storm Events)                       │   Python, GeoPandas, H3          GeoJSON, PMTiles, Parquet
-Synthetic utility                    ─┘   every 1 to 6 hours                     │ fetch
+Synthetic utility                    ─┘   every 1 to 6 hours                     │ R2 binding
                                                                                   v
-                                   storms.codyparham.com on GitHub Pages
+                                                                 data Worker on workers.dev
+                                                                 read-only, CORS for the site
+                                                                                  │ fetch
+                                                                                  v
+                                   stormx.codyparham.com on GitHub Pages
                                    Vite + TypeScript, ArcGIS Maps SDK, Calcite
                                    Esri basemaps; live NWS alerts called from the browser
 ```
 
-The ArcGIS API key is restricted by referrer to storms.codyparham.com, so it is safe in client code. The R2 write key lives only in GitHub Actions secrets.
+The ArcGIS API key is restricted by referrer to stormx.codyparham.com, so it is safe in client code. The R2 write key lives only in GitHub Actions secrets. The bucket stays private: the data Worker in `workers/data` reads it through an R2 binding and serves only the published folders (`live/`, `grid/`, `history/`, `risk/`, `static/`, `tiles/`, `sim/`), with byte ranges for PMTiles.
 
 ## Data sources
 
@@ -90,7 +94,7 @@ Nothing is needed from the owner: no key, account or payment. All three options 
 
 | Source | What it is | How the app uses it |
 | --- | --- | --- |
-| [NOAA MRMS base reflectivity (time-enabled)](https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity_time/ImageServer) | ArcGIS ImageServer of the national WSR-88D mosaic. Updates every 5 minutes, keeps a 4-hour moving window. CONUS, Alaska, Hawaii, the Caribbean and Guam. Its CORS headers allow `storms.codyparham.com` | **Primary.** An `ImageryLayer` in the SDK, tied to the time slider for a radar loop. Public domain |
+| [NOAA MRMS base reflectivity (time-enabled)](https://mapservices.weather.noaa.gov/eventdriven/rest/services/radar/radar_base_reflectivity_time/ImageServer) | ArcGIS ImageServer of the national WSR-88D mosaic. Updates every 5 minutes, keeps a 4-hour moving window. CONUS, Alaska, Hawaii, the Caribbean and Guam. Its CORS headers allow `stormx.codyparham.com` | **Primary.** An `ImageryLayer` in the SDK, tied to the time slider for a radar loop. Public domain |
 | [Iowa Environmental Mesonet NEXRAD tiles](https://mesonet.agron.iastate.edu/ogc/) | Web Mercator XYZ PNG tiles (`/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png`), 5-minute steps, `Access-Control-Allow-Origin: *` | **Fallback** `WebTileLayer` if the NOAA service is down |
 | [NOAA nowCOAST WMS](https://nowcoast.noaa.gov/geoserver/observations/weather_radar/ows?service=WMS&request=GetCapabilities) | WMS layers for CONUS, Alaska, Hawaii and Caribbean reflectivity mosaics | Second fallback as a `WMSLayer` |
 
@@ -284,12 +288,15 @@ Signing in is optional and free. Everything above works without an account.
 
 ## Setup steps (owner)
 
-- [ ] Create the R2 bucket `stormx-data`.
-- [ ] Connect the custom domain `data.codyparham.com` to the bucket.
-- [ ] Add a CORS rule that allows GET from `https://storms.codyparham.com` and `http://localhost:5173`.
-- [ ] Create an R2 API token (Object Read & Write, this bucket only) and add these repo Actions secrets: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`.
-- [ ] Create an ArcGIS Location Platform API key with basemap access only, restricted by referrer to `storms.codyparham.com` and `localhost`.
-- [ ] Add a Cloudflare DNS CNAME `storms` that points to `codyparham94.github.io` with the proxy off, then set the custom domain in the repo's Pages settings.
-- [ ] Register for a free NASA FIRMS `MAP_KEY` (firms.modaps.eosdis.nasa.gov/api/map_key) and add it as the `FIRMS_MAP_KEY` Actions secret.
-- [ ] Create a Supabase project for StormX and add Google and GitHub OAuth apps. For alert emails, make a free Resend account.
+Checked from outside on 2026-10-20. The **Setup check** workflow (Actions tab, "Run workflow") checks the secrets, the R2 key, the ArcGIS referrer restriction, the FIRMS key and Supabase sign-in without printing any value.
+
+- [x] Create the R2 bucket `stormx-data`.
+- [x] ~~Connect the custom domain `data.codyparham.com` to the bucket.~~ Not possible while DNS is on Squarespace. The data Worker replaces it.
+- [ ] Add a Cloudflare API token that can deploy Workers (the RExplorer one works if it covers this account) as the `CLOUDFLARE_API_TOKEN` Actions secret, then run **Deploy data Worker** and save the URL it prints as the `DATA_BASE_URL` repository variable.
+- [x] Create an R2 API token (Object Read & Write, this bucket only) and add these repo Actions secrets: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, plus `R2_BUCKET`.
+- [ ] Create an ArcGIS Location Platform API key with basemap access only, restricted by referrer to `https://stormx.codyparham.com` and `http://localhost:5173`. Add it as the `ARCGIS_API_KEY` secret.
+- [x] Point a CNAME at `codyparham94.github.io` and set the custom domain in Pages: `stormx.codyparham.com` (Squarespace DNS) is live with a certificate.
+- [ ] In Settings > Pages, set Source to **GitHub Actions** and tick **Enforce HTTPS**.
+- [x] Register for a free NASA FIRMS `MAP_KEY` and add it as the `FIRMS_MAP_KEY` Actions secret.
+- [x] Create a Supabase project for StormX with Google and GitHub sign-in, and add `SUPABASE_URL` and `SUPABASE_ANON_KEY` as repository variables. For alert emails, make a free Resend account (Phase 4).
 - [ ] Email odin@ornl.gov to confirm StormX may show ODIN outage data with credit.

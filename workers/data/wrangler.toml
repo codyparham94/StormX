@@ -1,0 +1,13 @@
+# Deployed by .github/workflows/data-worker.yml. The account comes from CLOUDFLARE_ACCOUNT_ID.
+name = "stormx-data"
+main = "src/index.ts"
+compatibility_date = "2026-09-28"
+workers_dev = true
+preview_urls = false
+
+[vars]
+ALLOWED_ORIGINS = "https://stormx.codyparham.com,http://localhost:5173,http://localhost:4173"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "stormx-data"
