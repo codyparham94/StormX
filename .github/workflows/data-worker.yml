@@ -48,8 +48,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           WRANGLER_SEND_METRICS: "false"
+        # pipefail: without it, tee hides a failed deploy and the job goes green.
+        shell: bash
         run: |
+          set -o pipefail
           npx wrangler deploy | tee deploy.txt
           url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.txt | head -1)
+          if [ -z "$url" ]; then echo "::error::wrangler deploy printed no workers.dev URL"; exit 1; fi
           echo "::notice title=Worker URL::$url (save it as the DATA_BASE_URL repository variable)"
           echo "### Data Worker deployed: $url" >> "$GITHUB_STEP_SUMMARY"
