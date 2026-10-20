@@ -1,0 +1,55 @@
+name: Deploy data Worker
+
+# Deploys workers/data (the stormx-data R2 bucket on workers.dev, CORS locked to the site).
+# Needs the CLOUDFLARE_API_TOKEN and R2_ACCOUNT_ID secrets; until both exist the job only reports
+# that it was skipped.
+
+on:
+  push:
+    branches: [main]
+    paths: ["workers/data/**", ".github/workflows/data-worker.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/data
+    env:
+      CLOUDFLARE_CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.R2_ACCOUNT_ID != '' }}
+    steps:
+      - name: Skip until Cloudflare is set up
+        if: env.CLOUDFLARE_CONFIGURED != 'true'
+        working-directory: .
+        run: echo "::notice title=Data Worker::CLOUDFLARE_API_TOKEN or R2_ACCOUNT_ID is not set; nothing deployed"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.CLOUDFLARE_CONFIGURED == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: env.CLOUDFLARE_CONFIGURED == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workers/data/package-lock.json
+      - if: env.CLOUDFLARE_CONFIGURED == 'true'
+        run: npm ci && npm run typecheck && npm test
+      - name: Deploy
+        if: env.CLOUDFLARE_CONFIGURED == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: "false"
+        run: |
+          npx wrangler deploy | tee deploy.txt
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.txt | head -1)
+          echo "::notice title=Worker URL::$url (save it as the DATA_BASE_URL repository variable)"
+          echo "### Data Worker deployed: $url" >> "$GITHUB_STEP_SUMMARY"
