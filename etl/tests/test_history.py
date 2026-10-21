@@ -61,3 +61,8 @@ def test_county_averages():
 def test_total_customers_column_is_read_when_present():
     lines = ["fips_code,county,state,customers_out,run_start_time,total_customers", "01001,Autauga,Alabama,2,2024-01-01 00:15:00,29666"]
     assert aggregate(lines).served == {"01001": 29666}
+
+
+def test_2023_sum_column():
+    lines = ["fips_code,county,state,sum,run_start_time", "01003,Baldwin,Alabama,7,2023-01-01 00:00:00"]
+    assert aggregate(lines).county_days[("01003", "2023-01-01")] == [7, 7]
