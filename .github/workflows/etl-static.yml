@@ -1,6 +1,7 @@
 name: ETL static files
 
-# Monthly: ZIP code centroids for the forecast popup (Census ZCTA Gazetteer) to static/zcta.json.
+# Monthly: ZIP code centroids for the forecast popup (Census ZCTA Gazetteer) to static/zcta.json,
+# and a snapshot of the HIFLD substations to grid/substations.geojson for the map to fall back on.
 
 on:
   schedule:
@@ -11,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  zcta:
+  static:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -25,6 +26,7 @@ jobs:
           python-version: "3.13"
       - run: pip install --quiet .
       - run: python -m stormx_etl.zcta out
+      - run: python -m stormx_etl.grid out
       - name: Upload to R2
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}

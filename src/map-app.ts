@@ -29,6 +29,8 @@ import {
 import type { Place } from "./forecast";
 import { ago } from "./forecast-format";
 import { MODES, type Mode } from "./modes";
+import { createOutageLayers } from "./outage-layers";
+import { outageStatus, type OutageSummary } from "./outage-format";
 import { createRadarLayers } from "./radar-layers";
 import { setUpRadarLoop } from "./radar-loop";
 
@@ -61,8 +63,7 @@ export async function startMap(dark: boolean): Promise<MapApp> {
   let currentDark = dark;
   const places = new GraphicsLayer({ title: "Forecast place", listMode: "hide" });
   const radar = createRadarLayers(DATA_BASE_URL);
-  // Each mode's layers; Outage risk mode's arrive in Phase 3.
-  const modeLayers: Record<Mode, Layer[]> = { radar: radar.groups, outage: [] };
+  const modeLayers: Record<Mode, Layer[]> = { radar: radar.groups, outage: createOutageLayers(DATA_BASE_URL) };
 
   element.map = new EsriMap({ basemap: basemapFor(dark), layers: [places] });
   const start = MODES.radar;
@@ -81,6 +82,23 @@ export async function startMap(dark: boolean): Promise<MapApp> {
     });
   window.setInterval(showLatest, 30_000);
 
+  const outageLine = document.getElementById("outage-status");
+  let summary: OutageSummary | undefined;
+  const showOutages = () => outageLine && summary && (outageLine.textContent = outageStatus(summary));
+  async function refreshOutages() {
+    if (!DATA_BASE_URL || !outageLine) return;
+    try {
+      const response = await fetch(`${DATA_BASE_URL}/live/outages/summary.json`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      summary = (await response.json()) as OutageSummary;
+      showOutages();
+    } catch {
+      outageLine.textContent = "Current outages are unavailable right now.";
+    }
+  }
+  window.setInterval(() => (shown === "outage" ? void refreshOutages() : undefined), 5 * 60_000);
+  window.setInterval(showOutages, 30_000);
+
   let shown: Mode | undefined;
   return {
     showMode(mode, fromLanding) {
@@ -90,6 +108,7 @@ export async function startMap(dark: boolean): Promise<MapApp> {
         element.map.layers.addMany(modeLayers[mode], 0);
         shown = mode;
         showLatest();
+        if (mode === "outage" && !summary) void refreshOutages();
       }
       // Switching modes keeps the place; only arriving from the landing page jumps to the mode's region.
       if (!fromLanding) return;

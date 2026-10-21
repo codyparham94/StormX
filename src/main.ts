@@ -56,7 +56,6 @@ function show(route: Route): void {
   modeSummary.textContent = MODES[mode].summary;
   modeNext.forEach((item) => (item.hidden = item.dataset.modeNext !== mode));
   document.querySelectorAll<HTMLElement>("[data-mode-only]").forEach((item) => (item.hidden = item.dataset.modeOnly !== mode));
-  if (mode !== "radar") closePanel("forecast-panel");
   void loadMap().then((m) => m.showMode(mode, previous !== "map"));
 }
 

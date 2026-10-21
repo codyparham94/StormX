@@ -56,7 +56,7 @@
           <calcite-segmented-control-item value="radar" icon-start="rain-thunder" checked>Radar</calcite-segmented-control-item>
           <calcite-segmented-control-item value="outage" icon-start="lightbulb">Outage risk</calcite-segmented-control-item>
         </calcite-segmented-control>
-        <calcite-action id="forecast-toggle" class="theme-toggle" icon="partly-cloudy" text="Forecast" scale="m" data-mode-only="radar"></calcite-action>
+        <calcite-action id="forecast-toggle" class="theme-toggle" icon="partly-cloudy" text="Forecast" scale="m"></calcite-action>
         <calcite-action id="layers-toggle" class="theme-toggle" icon="layers" text="Layers and legend" scale="m"></calcite-action>
         <calcite-action class="theme-toggle" data-theme-toggle icon="moon" text="Switch to dark mode" scale="m"></calcite-action>
       </header>
@@ -92,13 +92,8 @@
         <h2 id="mode-title">Radar</h2>
         <p id="mode-summary"></p>
         <p class="radar-status" data-mode-next="radar"><span id="radar-latest">Loading the latest radar…</span></p>
-        <ul class="coming" data-mode-next="outage" hidden>
-          <li>ORNL ODIN current outages <span class="tag real">Real</span></li>
-          <li>Transmission lines and substations <span class="tag real">Real</span></li>
-          <li>H3 storm risk index and outage history</li>
-          <li>Gulf Coast utility <span class="tag simulated">Simulated</span></li>
-        </ul>
-        <p class="phase-note" data-mode-next="outage" hidden>These layers arrive in the next build phase.</p>
+        <p class="radar-status" data-mode-next="outage" hidden><span id="outage-status">Loading current outages…</span></p>
+        <p class="phase-note" data-mode-next="outage" hidden>Next: outage history, the storm risk index and the simulated Gulf Coast utility.</p>
       </aside>
 
       <calcite-loader id="map-loader" class="map-loader" label="Loading the map"></calcite-loader>

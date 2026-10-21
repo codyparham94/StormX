@@ -52,26 +52,8 @@ export interface RadarLayers {
 }
 
 export function createRadarLayers(dataBaseUrl: string): RadarLayers {
-  const radar = new ImageryLayer({
-    url: MRMS_URL,
-    title: "Radar (NOAA MRMS base reflectivity)",
-    opacity: 0.75,
-    format: "png",
-    popupEnabled: false,
-    // New scans arrive about every 5 minutes; radar-loop.ts moves the slider along with them.
-    refreshInterval: 5,
-  });
-
-  const alerts = new FeatureLayer({
-    ...untimed,
-    url: NWS_WWA_URL,
-    title: "NWS watches, warnings and advisories",
-    definitionExpression: `NOT (${fireWeatherSql})`,
-    opacity: 0.6,
-    outFields: ["*"],
-    popupTemplate: alertPopup(),
-    refreshInterval: 2,
-  });
+  const radar = mrmsLayer();
+  const alerts = alertsLayer("NWS watches, warnings and advisories", `NOT (${fireWeatherSql})`);
 
   const outlookPopup = { title: "SPC outlook: {label2}", content: "Valid {valid} to {expire} (UTC)." };
   const spc = (id: number, title: string, visible: boolean) =>
@@ -161,38 +143,70 @@ export function createRadarLayers(dataBaseUrl: string): RadarLayers {
       }),
     );
   }
-  fireGroupLayers.push(
-    new FeatureLayer({
-      ...untimed,
-      url: `${WILDFIRES_URL}/1`,
-      title: "Fire perimeters (NIFC)",
-      outFields: ["*"],
-      popupTemplate: firePopup("Perimeter: {IncidentName}", [
-        { fieldName: "GISAcres", label: "Acres", format: { digitSeparator: true, places: 0 } },
-        { fieldName: "DateCurrent", label: "Last updated", format: { dateFormat: "short-date-short-time" } },
-      ]),
-    }),
-    new FeatureLayer({
-      ...untimed,
-      url: `${WILDFIRES_URL}/0`,
-      title: "Active fire incidents (NIFC)",
-      // Hundreds of icons bury the national view; the perimeters carry it until zoom 6.
-      minScale: 9_500_000,
-      outFields: ["*"],
-      popupTemplate: firePopup("{IncidentName} Fire", [
-        { fieldName: "DailyAcres", label: "Size (acres)", format: { digitSeparator: true, places: 0 } },
-        { fieldName: "PercentContained", label: "Contained (%)" },
-        { fieldName: "FireDiscoveryDateTime", label: "Started", format: { dateFormat: "short-date" } },
-        { fieldName: "ModifiedOnDateTime", label: "Last updated", format: { dateFormat: "short-date-short-time" } },
-        { fieldName: "POOCounty", label: "County" },
-        { fieldName: "POOState", label: "State" },
-      ]),
-    }),
-  );
+  fireGroupLayers.push(firePerimetersLayer(), fireIncidentsLayer());
   const fire = new GroupLayer({ title: "Fire", visibilityMode: "independent", layers: fireGroupLayers });
 
   // Bottom to top: outlooks under the radar, alerts and storms over it, fire on top.
   return { radar, groups: [outlooks, radar, alerts, tropical, fire] };
+}
+
+/** The MRMS base reflectivity loop. It follows the view's time, which the time slider sets. */
+export function mrmsLayer(): ImageryLayer {
+  return new ImageryLayer({
+    url: MRMS_URL,
+    title: "Radar (NOAA MRMS base reflectivity)",
+    opacity: 0.75,
+    format: "png",
+    popupEnabled: false,
+    // New scans arrive about every 5 minutes; radar-loop.ts moves the slider along with them.
+    refreshInterval: 5,
+  });
+}
+
+/** NWS watches, warnings and advisories, refreshed every 2 minutes. */
+export function alertsLayer(title: string, definitionExpression?: string): FeatureLayer {
+  return new FeatureLayer({
+    ...untimed,
+    url: NWS_WWA_URL,
+    title,
+    definitionExpression,
+    opacity: 0.6,
+    outFields: ["*"],
+    popupTemplate: alertPopup(),
+    refreshInterval: 2,
+  });
+}
+
+export function firePerimetersLayer(): FeatureLayer {
+  return new FeatureLayer({
+    ...untimed,
+    url: `${WILDFIRES_URL}/1`,
+    title: "Fire perimeters (NIFC)",
+    outFields: ["*"],
+    popupTemplate: firePopup("Perimeter: {IncidentName}", [
+      { fieldName: "GISAcres", label: "Acres", format: { digitSeparator: true, places: 0 } },
+      { fieldName: "DateCurrent", label: "Last updated", format: { dateFormat: "short-date-short-time" } },
+    ]),
+  });
+}
+
+export function fireIncidentsLayer(): FeatureLayer {
+  return new FeatureLayer({
+    ...untimed,
+    url: `${WILDFIRES_URL}/0`,
+    title: "Active fire incidents (NIFC)",
+    // Hundreds of icons bury the national view; the perimeters carry it until zoom 6.
+    minScale: 9_500_000,
+    outFields: ["*"],
+    popupTemplate: firePopup("{IncidentName} Fire", [
+      { fieldName: "DailyAcres", label: "Size (acres)", format: { digitSeparator: true, places: 0 } },
+      { fieldName: "PercentContained", label: "Contained (%)" },
+      { fieldName: "FireDiscoveryDateTime", label: "Started", format: { dateFormat: "short-date" } },
+      { fieldName: "ModifiedOnDateTime", label: "Last updated", format: { dateFormat: "short-date-short-time" } },
+      { fieldName: "POOCounty", label: "County" },
+      { fieldName: "POOState", label: "State" },
+    ]),
+  });
 }
 
 function firePopup(title: string, fieldInfos: NonNullable<FieldsContentProperties["fieldInfos"]>) {
