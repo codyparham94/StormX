@@ -131,6 +131,7 @@ export function createRadarLayers(dataBaseUrl: string): RadarLayers {
     }),
   ];
   if (dataBaseUrl) {
+    const stringFields = (...names: string[]) => names.map((name) => ({ name, type: "string" as const }));
     fireGroupLayers.push(
       new GeoJSONLayer({
         ...untimed,
@@ -138,6 +139,9 @@ export function createRadarLayers(dataBaseUrl: string): RadarLayers {
         title: "Smoke plumes (NOAA HMS)",
         visible: false,
         copyright: "NOAA Hazard Mapping System",
+        // Declared so the layer still loads when a file has no features to infer them from.
+        geometryType: "polygon",
+        fields: stringFields("density", "satellite", "start", "end"),
         renderer: smokeRenderer(),
         popupTemplate: { title: "{density} smoke", content: "Analyzed from {satellite} imagery, {start} to {end} (UTC)." },
       }),
@@ -147,6 +151,8 @@ export function createRadarLayers(dataBaseUrl: string): RadarLayers {
         title: "Satellite hotspots, last 24 hours (NASA FIRMS)",
         visible: false,
         copyright: "NASA FIRMS",
+        geometryType: "point",
+        fields: [...stringFields("source", "acquired", "confidence", "daynight"), { name: "frp", type: "double" }],
         renderer: hotspotRenderer(),
         popupTemplate: {
           title: "Hotspot ({confidence} confidence)",
