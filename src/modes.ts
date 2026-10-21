@@ -20,7 +20,7 @@ export const MODES: Record<Mode, ModeInfo> = {
     // The lower 48, framed so the Gulf and the Canadian border both show.
     center: [-97.5, 38.5],
     zoom: 4,
-    summary: "National radar loop, NWS alerts, severe and tropical outlooks, fire, and a forecast by ZIP or location.",
+    summary: "The national radar loop with NWS alerts, severe and tropical outlooks and fire. Open the forecast for any ZIP or your location.",
   },
   outage: {
     label: "Outage risk",
