@@ -82,7 +82,9 @@ def aggregate(lines: Iterable[str]) -> YearTotals:
     reader = csv.reader(lines)
     header = [h.strip().lstrip("﻿") for h in next(reader)]
     fips_col, state_col = header.index("fips_code"), header.index("state")
-    out_col, time_col = header.index("customers_out"), header.index("run_start_time")
+    # The 2023 file calls the count "sum"; every other year calls it "customers_out".
+    out_col = header.index("customers_out") if "customers_out" in header else header.index("sum")
+    time_col = header.index("run_start_time")
     served_col = header.index("total_customers") if "total_customers" in header else None
     days, snapshots, states, served = totals.county_days, totals.snapshots, totals.states, totals.served
     for row in reader:
