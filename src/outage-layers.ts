@@ -20,7 +20,13 @@ const SUBSTATIONS_URL = "https://services6.arcgis.com/OO2s4OoyCZkYJ6oE/arcgis/re
 // Only the radar follows the time slider (hidden in this mode, but it still sets the view's time).
 const untimed = { useViewTime: false } as const;
 
-export function createOutageLayers(dataBaseUrl: string): Layer[] {
+export interface OutageLayers {
+  layers: Layer[];
+  /** Today's outages and weather, and the grid that would bury the fills, hidden during a replay. */
+  live: Layer[];
+}
+
+export function createOutageLayers(dataBaseUrl: string): OutageLayers {
   const weather = new GroupLayer({
     title: "Weather now",
     visibilityMode: "independent",
@@ -33,10 +39,73 @@ export function createOutageLayers(dataBaseUrl: string): Layer[] {
   });
 
   const layers: Layer[] = [weather];
-  if (dataBaseUrl) layers.push(outagesLayer(dataBaseUrl));
-  layers.push(gridGroup(dataBaseUrl));
-  // Bottom to top: weather, then outages, then the grid so lines stay readable over the fills.
-  return layers;
+  let current: GeoJSONLayer | undefined;
+  if (dataBaseUrl) {
+    current = outagesLayer(dataBaseUrl);
+    layers.push(historyLayer(dataBaseUrl), current);
+  }
+  const grid = gridGroup(dataBaseUrl);
+  layers.push(grid);
+  // Bottom to top: weather, the history heatmap, current outages, then the grid so lines stay
+  // readable over the fills.
+  return { layers, live: current ? [weather, current, grid] : [weather, grid] };
+}
+
+function historyLayer(dataBaseUrl: string): GeoJSONLayer {
+  const fill = (color: number[]) => new SimpleFillSymbol({ color: [...color, 0.65], outline: { color: [255, 255, 255, 0.5], width: 0.3 } });
+  return new GeoJSONLayer({
+    ...untimed,
+    url: `${dataBaseUrl}/history/outages/counties.geojson`,
+    title: "Outage history heatmap (EAGLE-I, 2015 to 2025)",
+    copyright: "ORNL EAGLE-I",
+    visible: false,
+    opacity: 0.85,
+    geometryType: "polygon",
+    fields: [
+      { name: "fips", type: "string" },
+      { name: "name", type: "string" },
+      { name: "state", type: "string" },
+      { name: "customers", type: "integer" },
+      { name: "hours_per_customer", type: "double" },
+      { name: "outage_days", type: "double" },
+      { name: "worst", type: "integer" },
+      { name: "worst_day", type: "string" },
+      { name: "worst_pct", type: "double" },
+    ],
+    renderer: new ClassBreaksRenderer({
+      field: "hours_per_customer",
+      legendOptions: { title: "Hours without power per customer per year" },
+      defaultLabel: "No data",
+      defaultSymbol: fill([200, 200, 200]),
+      classBreakInfos: [
+        { minValue: 0, maxValue: 2, label: "Under 2 hours", symbol: fill([237, 248, 251]) },
+        { minValue: 2, maxValue: 5, label: "2 to 5 hours", symbol: fill([179, 205, 227]) },
+        { minValue: 5, maxValue: 10, label: "5 to 10 hours", symbol: fill([140, 150, 198]) },
+        { minValue: 10, maxValue: 24, label: "10 to 24 hours", symbol: fill([136, 86, 167]) },
+        { minValue: 24, maxValue: 100_000, label: "A day or more", symbol: fill([129, 15, 124]) },
+      ],
+    }),
+    popupTemplate: {
+      title: "{name}, {state}: outage history",
+      content: [
+        {
+          type: "fields",
+          fieldInfos: [
+            { fieldName: "hours_per_customer", label: "Hours without power per customer, yearly average", format: { places: 1 } },
+            { fieldName: "outage_days", label: "Outage days per year (1% or more of customers out)", format: { places: 1 } },
+            { fieldName: "worst", label: "Most customers out at once", format: { digitSeparator: true, places: 0 } },
+            { fieldName: "worst_pct", label: "As a share of customers (%)", format: { places: 1 } },
+            { fieldName: "worst_day", label: "On (UTC)" },
+            { fieldName: "customers", label: "Customers (modeled)", format: { digitSeparator: true, places: 0 } },
+          ],
+        },
+        {
+          type: "text",
+          text: "Real data from ORNL EAGLE-I, 2015 to 2025. Coverage grew over the years and gaps in collection count as no outage, so these are lower bounds.",
+        },
+      ],
+    },
+  });
 }
 
 function outagesLayer(dataBaseUrl: string): GeoJSONLayer {

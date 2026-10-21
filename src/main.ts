@@ -10,6 +10,8 @@ import "./style.css";
 import { MODES, lastMode, parseRoute, rememberMode, routeHash, type Mode, type Route } from "./modes";
 import { setUpTheme } from "./theme";
 import { setUpForecastPanel } from "./forecast";
+import { setUpHistoryPanel } from "./history";
+import { DATA_BASE_URL } from "./config";
 import type { MapApp } from "./map-app";
 
 const landing = document.getElementById("landing") as HTMLElement;
@@ -55,7 +57,12 @@ function show(route: Route): void {
   modeTitle.textContent = MODES[mode].label;
   modeSummary.textContent = MODES[mode].summary;
   modeNext.forEach((item) => (item.hidden = item.dataset.modeNext !== mode));
-  document.querySelectorAll<HTMLElement>("[data-mode-only]").forEach((item) => (item.hidden = item.dataset.modeOnly !== mode));
+  document.querySelectorAll<HTMLElement>("[data-mode-only]").forEach((item) => {
+    item.hidden = item.dataset.modeOnly !== mode;
+    // A panel whose button just disappeared closes with it.
+    const panel = item.dataset.panelFor;
+    if (item.hidden && panel) closePanel(panel);
+  });
   void loadMap().then((m) => m.showMode(mode, previous !== "map"));
 }
 
@@ -72,7 +79,7 @@ modeSwitch.addEventListener("calciteSegmentedControlChange", () => go({ screen: 
 window.addEventListener("hashchange", () => show(parseRoute(window.location.hash)));
 
 // Side panels: one open at a time, toggled from the top bar.
-const PANELS = { "layers-toggle": "layers-panel", "forecast-toggle": "forecast-panel" } as const;
+const PANELS = { "layers-toggle": "layers-panel", "forecast-toggle": "forecast-panel", "history-toggle": "history-panel" } as const;
 function closePanel(id: string): void {
   const panel = document.getElementById(id);
   if (panel) panel.hidden = true;
@@ -95,6 +102,7 @@ document.querySelectorAll<HTMLElement>("[data-close]").forEach((button) =>
   button.addEventListener("click", () => closePanel(button.dataset.close ?? "")),
 );
 setUpForecastPanel((place) => void mapApp?.then((m) => m.markPlace(place)));
+setUpHistoryPanel(DATA_BASE_URL, () => loadMap());
 
 // A bare visit goes straight to the mode picked last time; the StormX wordmark (#/) always shows the landing page.
 const initial = parseRoute(window.location.hash);
