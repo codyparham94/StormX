@@ -1,7 +1,8 @@
 name: ETL static files
 
 # Monthly: ZIP code centroids for the forecast popup (Census ZCTA Gazetteer) to static/zcta.json,
-# and a snapshot of the HIFLD substations to grid/substations.geojson for the map to fall back on.
+# a snapshot of the HIFLD substations to grid/substations.geojson for the map to fall back on, and
+# the grid exposure per H3 cell to risk/exposure-res6.json for the hourly risk job.
 
 on:
   schedule:
@@ -14,9 +15,12 @@ permissions:
 jobs:
   static:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: etl
+    env:
+      DATA_BASE_URL: ${{ vars.DATA_BASE_URL }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -27,6 +31,7 @@ jobs:
       - run: pip install --quiet .
       - run: python -m stormx_etl.zcta out
       - run: python -m stormx_etl.grid out
+      - run: python -m stormx_etl.exposure out "${DATA_BASE_URL:?set the DATA_BASE_URL repository variable}"
       - name: Upload to R2
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}

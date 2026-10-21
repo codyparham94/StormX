@@ -1,0 +1,44 @@
+name: ETL outage risk
+
+# Hourly: the live outage risk index (SPC, NHC, WPC and NWS hazards over the H3 grid exposure and
+# the county outage history) to risk/, then the simulated utility's tickets to sim/. Reads the
+# exposure and county files back through the data Worker.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: etl-risk
+  cancel-in-progress: false
+
+jobs:
+  risk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: etl
+    env:
+      DATA_BASE_URL: ${{ vars.DATA_BASE_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: pip install --quiet .
+      - run: python -m stormx_etl.risk out "${DATA_BASE_URL:?set the DATA_BASE_URL repository variable}"
+      - run: python -m stormx_etl.sim out "$DATA_BASE_URL"
+      - name: Upload to R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: ../scripts/upload-r2.sh out

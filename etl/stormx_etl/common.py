@@ -31,6 +31,13 @@ def fetch(url: str, *, timeout: int = 60, attempts: int = 3) -> bytes:
     raise last
 
 
+def load_json(source: str, *, timeout: int = 120) -> Any:
+    """Reads JSON from a URL, or from a local file when testing against ETL output."""
+    if source.startswith(("http://", "https://")):
+        return json.loads(fetch(source, timeout=timeout))
+    return json.loads(Path(source).read_text(encoding="utf-8"))
+
+
 def write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")

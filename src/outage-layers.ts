@@ -1,6 +1,7 @@
 /**
- * Outage risk mode's layers, all Real so far. The grid is drawn live from Esri-hosted copies of
- * HIFLD; current outages come from the ODIN ETL through the data Worker.
+ * Outage risk mode's layers. The grid is drawn live from Esri-hosted copies of HIFLD; current
+ * outages, outage history and the risk index come from the ETL through the data Worker. Titles
+ * carry a Real or Simulated tag, as the layer list and legend are where a visitor tells them apart.
  */
 import FeatureLayer from "@arcgis/core/layers/FeatureLayer.js";
 import GeoJSONLayer from "@arcgis/core/layers/GeoJSONLayer.js";
@@ -13,6 +14,8 @@ import SimpleFillSymbol from "@arcgis/core/symbols/SimpleFillSymbol.js";
 import SimpleLineSymbol from "@arcgis/core/symbols/SimpleLineSymbol.js";
 import SimpleMarkerSymbol from "@arcgis/core/symbols/SimpleMarkerSymbol.js";
 import { alertsLayer, fireIncidentsLayer, firePerimetersLayer, mrmsLayer } from "./radar-layers";
+import { createRiskLayers, type RiskLayers } from "./risk-layers";
+import { createSimLayers, type SimLayers } from "./sim-layers";
 
 const LINES_URL = "https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/US_Electric_Power_Transmission_Lines/FeatureServer/0";
 const SUBSTATIONS_URL = "https://services6.arcgis.com/OO2s4OoyCZkYJ6oE/arcgis/rest/services/Substations/FeatureServer/0";
@@ -22,13 +25,20 @@ const untimed = { useViewTime: false } as const;
 
 export interface OutageLayers {
   layers: Layer[];
-  /** Today's outages and weather, and the grid that would bury the fills, hidden during a replay. */
+  /** Today's outages, risk and weather, and the grid that would bury the fills, hidden during a replay. */
   live: Layer[];
+  /** A replay goes just under the grid. */
+  grid: Layer;
+  risk?: RiskLayers;
+  sim?: SimLayers;
 }
 
 export function createOutageLayers(dataBaseUrl: string): OutageLayers {
   const weather = new GroupLayer({
-    title: "Weather now",
+    title: "Weather now · Real",
+    // Off at first: the risk index already carries the warnings and outlooks, and the radar on top
+    // would hide it. One click in the layer list brings it all back.
+    visible: false,
     visibilityMode: "independent",
     layers: [
       mrmsLayer(),
@@ -38,17 +48,20 @@ export function createOutageLayers(dataBaseUrl: string): OutageLayers {
     ],
   });
 
-  const layers: Layer[] = [weather];
-  let current: GeoJSONLayer | undefined;
-  if (dataBaseUrl) {
-    current = outagesLayer(dataBaseUrl);
-    layers.push(historyLayer(dataBaseUrl), current);
-  }
   const grid = gridGroup(dataBaseUrl);
-  layers.push(grid);
-  // Bottom to top: weather, the history heatmap, current outages, then the grid so lines stay
-  // readable over the fills.
-  return { layers, live: current ? [weather, current, grid] : [weather, grid] };
+  if (!dataBaseUrl) return { layers: [weather, grid], live: [weather, grid], grid };
+  const risk = createRiskLayers(dataBaseUrl, historyLayer(dataBaseUrl));
+  const current = outagesLayer(dataBaseUrl);
+  const sim = createSimLayers(dataBaseUrl);
+  // Bottom to top: risk and the history heatmap, weather, current outages, the grid so lines stay
+  // readable over the fills, then the simulated utility, which only covers the demo region.
+  return {
+    layers: [risk.group, weather, current, grid, sim.group],
+    live: [risk.group, weather, current, grid, sim.group],
+    grid,
+    risk,
+    sim,
+  };
 }
 
 function historyLayer(dataBaseUrl: string): GeoJSONLayer {
@@ -113,7 +126,7 @@ function outagesLayer(dataBaseUrl: string): GeoJSONLayer {
   return new GeoJSONLayer({
     ...untimed,
     url: `${dataBaseUrl}/live/outages/odin-county.geojson`,
-    title: "Customers out by county (ORNL ODIN)",
+    title: "Customers out by county (ORNL ODIN) · Real",
     copyright: "ORNL ODIN, reported by participating utilities",
     // The ETL runs every 15 minutes.
     refreshInterval: 5,
@@ -158,7 +171,7 @@ function outagesLayer(dataBaseUrl: string): GeoJSONLayer {
 function gridGroup(dataBaseUrl: string): GroupLayer {
   const substations = substationsLayer();
   const grid = new GroupLayer({
-    title: "Power grid (HIFLD)",
+    title: "Power grid (HIFLD) · Real",
     visibilityMode: "independent",
     layers: [
       // The 94,000 lines are a solid mat at regional zooms, so the smaller ones wait until about zoom 8.

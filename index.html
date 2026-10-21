@@ -64,7 +64,7 @@
 
       <aside id="layers-panel" class="glass side-panel" aria-labelledby="layers-title" hidden>
         <div class="side-head">
-          <h2 id="layers-title">Layers <span class="tag real">Real</span></h2>
+          <h2 id="layers-title">Layers <span class="tag real">Real</span> <span class="tag simulated" data-mode-only="outage" hidden>Simulated</span></h2>
           <calcite-action data-close="layers-panel" icon="x" text="Close" scale="s"></calcite-action>
         </div>
         <arcgis-layer-list reference-element="map" visibility-appearance="checkbox"></arcgis-layer-list>
@@ -121,7 +121,8 @@
         <p id="mode-summary"></p>
         <p class="radar-status" data-mode-next="radar"><span id="radar-latest">Loading the latest radar…</span></p>
         <p class="radar-status" data-mode-next="outage" hidden><span id="outage-status">Loading current outages…</span></p>
-        <p class="phase-note" data-mode-next="outage" hidden>Next: outage history, the storm risk index and the simulated Gulf Coast utility.</p>
+        <p class="status-line" data-mode-next="outage" hidden><span class="tag real">Real</span> <span id="risk-status">Loading the outage risk index…</span></p>
+        <p class="status-line" data-mode-next="outage" hidden><span class="tag simulated">Simulated</span> <span id="sim-status">Loading the demo utility…</span></p>
       </aside>
 
       <calcite-loader id="map-loader" class="map-loader" label="Loading the map"></calcite-loader>
@@ -131,6 +132,9 @@
       <calcite-notice id="map-error" class="map-notice" kind="danger" icon open hidden>
         <div slot="message">The map couldn't load. Check your connection and reload the page.</div>
       </calcite-notice>
+      <button id="sim-ribbon" class="sim-ribbon" type="button" hidden>
+        Simulated data: StormX Demo Electric is a fictional utility. <span class="sim-ribbon-go">Show it</span>
+      </button>
     </div>
 
     <script type="module" src="/src/main.ts"></script>
