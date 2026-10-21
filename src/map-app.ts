@@ -10,6 +10,7 @@ import "@arcgis/map-components/components/arcgis-layer-list";
 import "@arcgis/map-components/components/arcgis-legend";
 import "@arcgis/map-components/components/arcgis-time-slider";
 import esriConfig from "@arcgis/core/config.js";
+import * as reactiveUtils from "@arcgis/core/core/reactiveUtils.js";
 import Basemap from "@arcgis/core/Basemap.js";
 import Graphic from "@arcgis/core/Graphic.js";
 import EsriMap from "@arcgis/core/Map.js";
@@ -36,6 +37,8 @@ import { createOutageLayers } from "./outage-layers";
 import { outageStatus, type OutageSummary } from "./outage-format";
 import { createRadarLayers } from "./radar-layers";
 import { setUpRadarLoop } from "./radar-loop";
+import { riskStatus, type RiskSummary } from "./risk-format";
+import { simStatus, type SimSummary } from "./sim-format";
 
 type MapElement = HTMLElement & {
   map: EsriMap;
@@ -49,6 +52,12 @@ export interface MapApp extends ReplayHost {
   showMode(mode: Mode, fromLanding: boolean): void;
   setDark(dark: boolean): void;
   markPlace(place: Place): void;
+}
+
+async function getJson<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+  return (await response.json()) as T;
 }
 
 function basemapFor(dark: boolean): Basemap {
@@ -105,6 +114,40 @@ export async function startMap(dark: boolean): Promise<MapApp> {
   window.setInterval(() => (shown === "outage" ? void refreshOutages() : undefined), 5 * 60_000);
   window.setInterval(showOutages, 30_000);
 
+  // The risk index and the simulated utility update hourly, together.
+  const riskLine = document.getElementById("risk-status");
+  const simLine = document.getElementById("sim-status");
+  let riskSummary: RiskSummary | undefined;
+  let riskLoaded = false;
+  const showRisk = () => riskLine && riskSummary && (riskLine.textContent = riskStatus(riskSummary));
+  async function refreshRisk() {
+    if (!DATA_BASE_URL || !outage.risk) return;
+    riskLoaded = true;
+    const [risk, sim, hexes] = await Promise.allSettled([
+      getJson<RiskSummary>(`${DATA_BASE_URL}/risk/summary.json`),
+      getJson<SimSummary>(`${DATA_BASE_URL}/sim/summary.json`),
+      outage.risk.refresh(),
+    ]);
+    if (risk.status === "fulfilled") {
+      riskSummary = risk.value;
+      showRisk();
+    } else if (riskLine) riskLine.textContent = "The outage risk index is unavailable right now.";
+    if (simLine) simLine.textContent = sim.status === "fulfilled" ? simStatus(sim.value) : "The demo utility is unavailable right now.";
+    if (hexes.status === "rejected") console.error(hexes.reason);
+  }
+  window.setInterval(() => (shown === "outage" ? void refreshRisk() : undefined), 15 * 60_000);
+  window.setInterval(showRisk, 30_000);
+
+  const ribbon = document.getElementById("sim-ribbon");
+  const sim = outage.sim;
+  const showRibbon = () => ribbon && (ribbon.hidden = !(shown === "outage" && sim?.group.visible));
+  if (sim) {
+    reactiveUtils.watch(() => sim.group.visible, showRibbon);
+    ribbon?.addEventListener("click", () => {
+      void sim.territory.queryExtent().then(({ extent }) => extent && element.goTo(extent.expand(1.4)));
+    });
+  }
+
   let shown: Mode | undefined;
   return {
     showMode(mode, fromLanding) {
@@ -114,7 +157,9 @@ export async function startMap(dark: boolean): Promise<MapApp> {
         element.map.layers.addMany(modeLayers[mode], 0);
         shown = mode;
         showLatest();
+        showRibbon();
         if (mode === "outage" && !summary) void refreshOutages();
+        if (mode === "outage" && !riskLoaded) void refreshRisk();
       }
       // Switching modes keeps the place; only arriving from the landing page jumps to the mode's region.
       if (!fromLanding) return;
@@ -144,7 +189,7 @@ export async function startMap(dark: boolean): Promise<MapApp> {
       }
       if (!layer) return;
       // Over the outage fills but under the grid, so it leaves with the mode like the rest.
-      const gridIndex = modeLayers.outage.length - 1;
+      const gridIndex = modeLayers.outage.indexOf(outage.grid);
       modeLayers.outage.splice(gridIndex, 0, layer);
       if (shown === "outage") element.map.layers.add(layer, element.map.layers.indexOf(modeLayers.outage[gridIndex + 1]));
       if (focus) void element.goTo(focus.expand(1.2));

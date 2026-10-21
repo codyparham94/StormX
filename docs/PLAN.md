@@ -199,6 +199,16 @@ A 0 to 100 index per H3 hex (resolution 6 nationally, 8 in the demo region), rol
 - **Vulnerability (20%):** tree canopy, the county's historical outage rate from EAGLE-I, and distance to a substation.
 - **v2:** a gradient-boosted model trained on past storms, compared with the index on a backtest page.
 
+**As built in Phase 3** (`etl/stormx_etl/exposure.py` monthly, `risk.py` hourly):
+
+- **Combining:** risk = 100 × hazard × (0.5 + 0.3 × exposure + 0.2 × vulnerability). The 50/30/20 weights stay, but hazard multiplies the rest, so a dense grid under clear skies scores 0 instead of 50. Levels: Low under 15, Elevated 15, High 30, Very high 50, Extreme 70.
+- **Hazard (0 to 1):** the worst of the SPC day 1 outlook (categorical, plus wind, tornado and hail probabilities with the significant-severe areas), NHC 5-day 34, 50 and 64 kt wind probabilities, WPC WSSI ice and snow load impacts (days 1 to 3), and NWS warnings and watches scored by type. Polygons become res 6 cells by overlap, so thin warnings still count. Peak gust, flood depth and heat load are not in v1.
+- **Exposure (0 to 1):** 0.4 line length + 0.3 substation count + 0.3 customers, each log-scaled to its 95th percentile. Customers are EAGLE-I's modeled county counts spread evenly over the county's cells (the Census households version is still to do).
+- **Vulnerability (0 to 1):** 0.7 × the county's percentile rank for yearly outage hours per customer (EAGLE-I, 2015 to 2025) + 0.3 × more than two rings (about 15 km) from any substation. Tree canopy is not in v1.
+- **Customers affected:** a rough guess of customers × 0.4 × (risk / 100)², so 10% at a risk of 50 and 26% at 80.
+- **Rollups:** H3 res 6 and counties (each county's worst cell). Tracts, res 8 in the demo region and per-asset scores are still to do.
+- **Simulated utility:** StormX Demo Electric, east of Baton Rouge: 5 substations and about 30 feeders from a fixed seed. Hourly tickets follow the live risk over each feeder, on top of about one everyday ticket an hour.
+
 ## Screens
 
 StormX has a landing page and two map modes. A toggle at the top of the map switches between the modes and keeps the place and time the visitor is looking at.

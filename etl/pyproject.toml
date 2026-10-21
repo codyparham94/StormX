@@ -3,7 +3,7 @@ name = "stormx-etl"
 version = "0.1.0"
 description = "StormX ETL: fetches public feeds and writes the files the site reads from R2"
 requires-python = ">=3.12"
-dependencies = ["pyshp==2.3.1"]
+dependencies = ["h3==4.5.0", "pyshp==2.3.1"]
 
 [project.optional-dependencies]
 dev = ["pytest==8.4.2"]

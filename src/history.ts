@@ -15,6 +15,7 @@ import {
   dayStatus,
   daysBetween,
   eventLabel,
+  focusCounties,
   monthsFor,
   nationalTotals,
   peaksForWindow,
@@ -159,16 +160,15 @@ export function setUpHistoryPanel(dataBaseUrl: string, host: () => Promise<Repla
         ],
       });
       // Start on the worst day, which is what the visitor usually wants to see first, and frame the
-      // hardest-hit counties that together had 80% of that day's outages.
+      // hardest-hit counties that together had 80% of that day's outages, leaving out stray far-off ones.
       const worst = totals.indexOf(Math.max(...totals));
       slider.max = String(days.length - 1);
       showDay(worst);
-      const out = (g: Graphic) => Number(g.attributes[`d${worst}`]) || 0;
-      const ranked = [...source].sort((a, b) => out(b) - out(a));
-      const target = 0.8 * ranked.reduce((sum, g) => sum + out(g), 0);
-      let running = 0;
-      const hit = ranked.filter((g) => (running += out(g)) - out(g) < target);
-      const focus = hit.map((g) => g.geometry?.extent).reduce<Extent | undefined>((all, e) => (e ? (all ? all.union(e) : e.clone()) : all), undefined);
+      const extents = source.map((g) => g.geometry?.extent);
+      const hit = focusCounties(
+        source.map((g, i) => ({ out: Number(g.attributes[`d${worst}`]) || 0, center: extents[i] ? [extents[i].center.x, extents[i].center.y] : [0, 0] })),
+      );
+      const focus = hit.map((i) => extents[i]).reduce<Extent | undefined>((all, e) => (e ? (all ? all.union(e) : e.clone()) : all), undefined);
       (await host()).showReplay(layer, focus);
       controls.hidden = false;
       message.textContent = "";

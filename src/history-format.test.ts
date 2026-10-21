@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { daysBetween, eventLabel, monthsFor, nationalTotals, peaksForWindow, replayCounties, toRings, windowFrom, type CountyFeature } from "./history-format";
+import { daysBetween, eventLabel, focusCounties, monthsFor, nationalTotals, peaksForWindow, replayCounties, toRings, windowFrom, type CountyFeature } from "./history-format";
 
 describe("windows", () => {
   it("lists days across a month end and caps the length", () => {
@@ -44,4 +44,18 @@ it("labels an event", () => {
   const event = { start: "2021-02-14", end: "2021-02-20", peak_day: "2021-02-16", peak: 4_612_345, states: ["Texas", "Louisiana"] };
   expect(eventLabel(event)).toBe("Feb 14 to 20, 2021: Texas, Louisiana (4.6M out at peak)");
   expect(eventLabel({ ...event, end: "2021-03-02" })).toMatch(/^Feb 14 to Mar 2, 2021:/);
+});
+
+describe("focusCounties", () => {
+  it("frames the worst-hit counties and drops far-off spikes", () => {
+    const counties = [
+      { out: 500, center: [-82, 34] }, // South Carolina
+      { out: 400, center: [-83, 33] }, // Georgia
+      { out: 5, center: [-100, 40] }, // background
+      { out: 150, center: [-66, 18] }, // Puerto Rico
+      { out: 100, center: [-120, 37] }, // California
+      { out: 0, center: [-90, 30] },
+    ];
+    expect(focusCounties(counties).sort()).toEqual([0, 1]);
+  });
 });

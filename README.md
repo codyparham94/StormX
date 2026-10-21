@@ -34,7 +34,7 @@ VITE_ARCGIS_API_KEY=...
 | Path | What it is |
 | --- | --- |
 | `index.html`, `src/` | The site: landing page, Radar and Outage risk modes, glass UI, light and dark mode |
-| `etl/` | Python ETL (FIRMS hotspots, HMS smoke, ZIP centroids, ODIN outages, substations snapshot, EAGLE-I history) that writes the files R2 serves |
+| `etl/` | Python ETL (FIRMS hotspots, HMS smoke, ZIP centroids, ODIN outages, substations snapshot, EAGLE-I history, grid exposure, the H3 risk index and the simulated utility) that writes the files R2 serves |
 | `scripts/upload-r2.sh` | Uploads an ETL output folder to R2 with the right content types |
 | `workers/data/` | Cloudflare Worker that serves the private `stormx-data` bucket read-only, with CORS for the site |
 | `.github/workflows/ci.yml` | Typecheck, tests and build for the site and the Worker |
@@ -43,7 +43,8 @@ VITE_ARCGIS_API_KEY=...
 | `.github/workflows/etl-live.yml` | Every 3 hours: fire hotspots and smoke to `live/fire/` |
 | `.github/workflows/etl-outages.yml` | Every 15 minutes: ORNL ODIN county outages to `live/outages/` |
 | `.github/workflows/etl-history.yml` | By hand, and yearly: EAGLE-I outage history (2014 to 2025) to `history/outages/` |
-| `.github/workflows/etl-static.yml` | Monthly: ZIP code centroids to `static/zcta.json`, substations snapshot to `grid/substations.geojson` |
+| `.github/workflows/etl-static.yml` | Monthly: ZIP code centroids to `static/zcta.json`, substations snapshot to `grid/substations.geojson`, grid exposure per H3 cell to `risk/exposure-res6.json` |
+| `.github/workflows/etl-risk.yml` | Hourly: the H3 outage risk index to `risk/`, and the simulated utility (StormX Demo Electric) to `sim/` |
 | `.github/workflows/setup-check.yml` | Checks the setup steps in the plan without printing any secret |
 
 ## Configuration
@@ -52,7 +53,7 @@ VITE_ARCGIS_API_KEY=...
 | --- | --- | --- |
 | `ARCGIS_API_KEY` | secret | Site build (basemaps; referrer-restricted, so public by design) |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | variables | Site build (accounts, Phase 4) |
-| `DATA_BASE_URL` | variable | Site build: the data Worker's workers.dev URL |
+| `DATA_BASE_URL` | variable | Site build, and the exposure and risk ETL, which read earlier output back through the data Worker |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | secrets | ETL uploads |
 | `CLOUDFLARE_API_TOKEN` | secret | Data Worker deploy |
 | `FIRMS_MAP_KEY` | secret | ETL (fire hotspots) |

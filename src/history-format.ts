@@ -130,3 +130,29 @@ export function nationalTotals(days: string[], months: MonthFile[]): number[] {
 export function dayStatus(day: string, total: number): string {
   return `${dayLabel(day)}: ${count.format(total)} customers out at the worst point`;
 }
+
+export interface FocusCounty {
+  out: number;
+  /** The county's center, [lng, lat]. */
+  center: number[];
+}
+
+/**
+ * Which counties to frame for a replay day: the hardest hit that together had `share` of the
+ * outages, minus far-off ones (a Puerto Rico or California spike during a Southeast hurricane) more
+ * than `radius` degrees from the outage-weighted median center. Returns their indexes.
+ */
+export function focusCounties(counties: FocusCounty[], share = 0.8, radius = 12): number[] {
+  const ranked = counties.map((c, i) => ({ ...c, i })).filter((c) => c.out > 0).sort((a, b) => b.out - a.out);
+  const target = share * ranked.reduce((sum, c) => sum + c.out, 0);
+  let running = 0;
+  const hit = ranked.filter((c) => (running += c.out) - c.out < target);
+  const median = (axis: 0 | 1) => {
+    const sorted = [...hit].sort((a, b) => a.center[axis] - b.center[axis]);
+    const half = hit.reduce((sum, c) => sum + c.out, 0) / 2;
+    let acc = 0;
+    return sorted.find((c) => (acc += c.out) >= half)?.center[axis] ?? 0;
+  };
+  const [x, y] = [median(0), median(1)];
+  return hit.filter((c) => Math.hypot(c.center[0] - x, c.center[1] - y) <= radius).map((c) => c.i);
+}
