@@ -27,7 +27,7 @@ export const MODES: Record<Mode, ModeInfo> = {
     // The Gulf Coast demo region, from Houston to Mobile.
     center: [-91.5, 30.3],
     zoom: 6,
-    summary: "Current outages, the power grid, the storm risk index, outage history and the simulated Gulf Coast utility.",
+    summary: "Current outages by county, the transmission grid and the weather on top of it. Open the forecast to jump to a ZIP or your location.",
   },
 };
 

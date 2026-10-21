@@ -13,7 +13,9 @@ import esriConfig from "@arcgis/core/config.js";
 import Basemap from "@arcgis/core/Basemap.js";
 import Graphic from "@arcgis/core/Graphic.js";
 import EsriMap from "@arcgis/core/Map.js";
+import type Extent from "@arcgis/core/geometry/Extent.js";
 import Point from "@arcgis/core/geometry/Point.js";
+import type FeatureLayer from "@arcgis/core/layers/FeatureLayer.js";
 import GraphicsLayer from "@arcgis/core/layers/GraphicsLayer.js";
 import type Layer from "@arcgis/core/layers/Layer.js";
 import TileLayer from "@arcgis/core/layers/TileLayer.js";
@@ -27,8 +29,11 @@ import {
   FALLBACK_TILES_LIGHT,
 } from "./config";
 import type { Place } from "./forecast";
+import type { ReplayHost } from "./history";
 import { ago } from "./forecast-format";
 import { MODES, type Mode } from "./modes";
+import { createOutageLayers } from "./outage-layers";
+import { outageStatus, type OutageSummary } from "./outage-format";
 import { createRadarLayers } from "./radar-layers";
 import { setUpRadarLoop } from "./radar-loop";
 
@@ -37,10 +42,10 @@ type MapElement = HTMLElement & {
   center: Point;
   zoom: number;
   viewOnReady(): Promise<void>;
-  goTo(target: { center: Point; zoom: number } | Graphic, options?: { animate?: boolean }): Promise<unknown>;
+  goTo(target: { center: Point; zoom: number } | Graphic | Extent, options?: { animate?: boolean }): Promise<unknown>;
 };
 
-export interface MapApp {
+export interface MapApp extends ReplayHost {
   showMode(mode: Mode, fromLanding: boolean): void;
   setDark(dark: boolean): void;
   markPlace(place: Place): void;
@@ -61,8 +66,10 @@ export async function startMap(dark: boolean): Promise<MapApp> {
   let currentDark = dark;
   const places = new GraphicsLayer({ title: "Forecast place", listMode: "hide" });
   const radar = createRadarLayers(DATA_BASE_URL);
-  // Each mode's layers; Outage risk mode's arrive in Phase 3.
-  const modeLayers: Record<Mode, Layer[]> = { radar: radar.groups, outage: [] };
+  const outage = createOutageLayers(DATA_BASE_URL);
+  const modeLayers: Record<Mode, Layer[]> = { radar: radar.groups, outage: outage.layers };
+  let replay: FeatureLayer | null = null;
+  let hiddenLive: Layer[] = [];
 
   element.map = new EsriMap({ basemap: basemapFor(dark), layers: [places] });
   const start = MODES.radar;
@@ -81,6 +88,23 @@ export async function startMap(dark: boolean): Promise<MapApp> {
     });
   window.setInterval(showLatest, 30_000);
 
+  const outageLine = document.getElementById("outage-status");
+  let summary: OutageSummary | undefined;
+  const showOutages = () => outageLine && summary && (outageLine.textContent = outageStatus(summary));
+  async function refreshOutages() {
+    if (!DATA_BASE_URL || !outageLine) return;
+    try {
+      const response = await fetch(`${DATA_BASE_URL}/live/outages/summary.json`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      summary = (await response.json()) as OutageSummary;
+      showOutages();
+    } catch {
+      outageLine.textContent = "Current outages are unavailable right now.";
+    }
+  }
+  window.setInterval(() => (shown === "outage" ? void refreshOutages() : undefined), 5 * 60_000);
+  window.setInterval(showOutages, 30_000);
+
   let shown: Mode | undefined;
   return {
     showMode(mode, fromLanding) {
@@ -90,6 +114,7 @@ export async function startMap(dark: boolean): Promise<MapApp> {
         element.map.layers.addMany(modeLayers[mode], 0);
         shown = mode;
         showLatest();
+        if (mode === "outage" && !summary) void refreshOutages();
       }
       // Switching modes keeps the place; only arriving from the landing page jumps to the mode's region.
       if (!fromLanding) return;
@@ -102,6 +127,27 @@ export async function startMap(dark: boolean): Promise<MapApp> {
       if (next === currentDark) return;
       currentDark = next;
       element.map.basemap = basemapFor(next);
+    },
+    showReplay(layer, focus) {
+      if (replay) {
+        modeLayers.outage = modeLayers.outage.filter((l) => l !== replay);
+        element.map.layers.remove(replay);
+      }
+      replay = layer;
+      // Remember which live layers were on, so stopping the replay restores the visitor's choice.
+      if (layer && !hiddenLive.length) {
+        hiddenLive = outage.live.filter((l) => l.visible);
+        hiddenLive.forEach((l) => (l.visible = false));
+      } else if (!layer) {
+        hiddenLive.forEach((l) => (l.visible = true));
+        hiddenLive = [];
+      }
+      if (!layer) return;
+      // Over the outage fills but under the grid, so it leaves with the mode like the rest.
+      const gridIndex = modeLayers.outage.length - 1;
+      modeLayers.outage.splice(gridIndex, 0, layer);
+      if (shown === "outage") element.map.layers.add(layer, element.map.layers.indexOf(modeLayers.outage[gridIndex + 1]));
+      if (focus) void element.goTo(focus.expand(1.2));
     },
     markPlace(place) {
       const marker = new Graphic({

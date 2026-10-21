@@ -18,6 +18,9 @@ npm run build
 cd etl && pip install -e ".[dev]" && pytest -q
 python -m stormx_etl.fire out   # FIRMS_MAP_KEY in the environment for hotspots
 python -m stormx_etl.zcta out
+python -m stormx_etl.outages out
+python -m stormx_etl.grid out
+python -m stormx_etl.history out 2021   # EAGLE-I outage history; no years means 2014 to 2025
 ```
 
 Without `VITE_ARCGIS_API_KEY` the map falls back to Esri's keyless canvas tiles. To use the real basemaps, put the key in `.env.local` (ignored by git):
@@ -31,14 +34,16 @@ VITE_ARCGIS_API_KEY=...
 | Path | What it is |
 | --- | --- |
 | `index.html`, `src/` | The site: landing page, Radar and Outage risk modes, glass UI, light and dark mode |
-| `etl/` | Python ETL (FIRMS hotspots, HMS smoke, ZIP centroids) that writes the files R2 serves |
+| `etl/` | Python ETL (FIRMS hotspots, HMS smoke, ZIP centroids, ODIN outages, substations snapshot, EAGLE-I history) that writes the files R2 serves |
 | `scripts/upload-r2.sh` | Uploads an ETL output folder to R2 with the right content types |
 | `workers/data/` | Cloudflare Worker that serves the private `stormx-data` bucket read-only, with CORS for the site |
 | `.github/workflows/ci.yml` | Typecheck, tests and build for the site and the Worker |
 | `.github/workflows/deploy.yml` | Builds the site and publishes it to GitHub Pages (Source: GitHub Actions) |
 | `.github/workflows/data-worker.yml` | Deploys the data Worker once `CLOUDFLARE_API_TOKEN` is set |
 | `.github/workflows/etl-live.yml` | Every 3 hours: fire hotspots and smoke to `live/fire/` |
-| `.github/workflows/etl-static.yml` | Monthly: ZIP code centroids to `static/zcta.json` |
+| `.github/workflows/etl-outages.yml` | Every 15 minutes: ORNL ODIN county outages to `live/outages/` |
+| `.github/workflows/etl-history.yml` | By hand, and yearly: EAGLE-I outage history (2014 to 2025) to `history/outages/` |
+| `.github/workflows/etl-static.yml` | Monthly: ZIP code centroids to `static/zcta.json`, substations snapshot to `grid/substations.geojson` |
 | `.github/workflows/setup-check.yml` | Checks the setup steps in the plan without printing any secret |
 
 ## Configuration

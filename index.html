@@ -56,7 +56,8 @@
           <calcite-segmented-control-item value="radar" icon-start="rain-thunder" checked>Radar</calcite-segmented-control-item>
           <calcite-segmented-control-item value="outage" icon-start="lightbulb">Outage risk</calcite-segmented-control-item>
         </calcite-segmented-control>
-        <calcite-action id="forecast-toggle" class="theme-toggle" icon="partly-cloudy" text="Forecast" scale="m" data-mode-only="radar"></calcite-action>
+        <calcite-action id="forecast-toggle" class="theme-toggle" icon="partly-cloudy" text="Forecast" scale="m"></calcite-action>
+        <calcite-action id="history-toggle" class="theme-toggle" icon="clock-forward" text="Outage history" scale="m" data-mode-only="outage" hidden></calcite-action>
         <calcite-action id="layers-toggle" class="theme-toggle" icon="layers" text="Layers and legend" scale="m"></calcite-action>
         <calcite-action class="theme-toggle" data-theme-toggle icon="moon" text="Switch to dark mode" scale="m"></calcite-action>
       </header>
@@ -69,6 +70,33 @@
         <arcgis-layer-list reference-element="map" visibility-appearance="checkbox"></arcgis-layer-list>
         <h3 class="side-sub">Legend</h3>
         <arcgis-legend reference-element="map"></arcgis-legend>
+      </aside>
+
+      <aside id="history-panel" class="glass side-panel" aria-labelledby="history-title" hidden>
+        <div class="side-head">
+          <h2 id="history-title">Outage history <span class="tag real">Real</span></h2>
+          <calcite-action data-close="history-panel" icon="x" text="Close" scale="s"></calcite-action>
+        </div>
+        <p class="side-note">Replay county outages from ORNL EAGLE-I, November 2014 to 2025, one day at a time.</p>
+        <label class="field-label" for="history-event">Pick a past outage event</label>
+        <select id="history-event" class="glass-select">
+          <option value="">Biggest events, newest first</option>
+        </select>
+        <label class="field-label" for="history-date">Or start from a date (10 days)</label>
+        <form id="history-date-form" class="fc-form">
+          <input id="history-date" class="glass-select" type="date" required />
+          <calcite-button type="submit" appearance="solid">Go</calcite-button>
+        </form>
+        <p id="history-message" class="side-note" aria-live="polite"></p>
+        <div id="history-controls" class="history-controls" hidden>
+          <p id="history-status" class="history-status" aria-live="polite"></p>
+          <input id="history-day" type="range" min="0" max="0" step="1" value="0" aria-label="Day of the replay" />
+          <div class="history-buttons">
+            <calcite-button id="history-play" appearance="solid" icon-start="play">Play</calcite-button>
+            <calcite-button id="history-stop" appearance="outline" icon-start="x">Stop replay</calcite-button>
+          </div>
+          <p class="side-note">Colors show the most customers out at once that day, as a share of the county. Today's outages, weather and grid are hidden during the replay and come back when you stop it.</p>
+        </div>
       </aside>
 
       <aside id="forecast-panel" class="glass side-panel" aria-labelledby="forecast-title" hidden>
@@ -92,13 +120,8 @@
         <h2 id="mode-title">Radar</h2>
         <p id="mode-summary"></p>
         <p class="radar-status" data-mode-next="radar"><span id="radar-latest">Loading the latest radar…</span></p>
-        <ul class="coming" data-mode-next="outage" hidden>
-          <li>ORNL ODIN current outages <span class="tag real">Real</span></li>
-          <li>Transmission lines and substations <span class="tag real">Real</span></li>
-          <li>H3 storm risk index and outage history</li>
-          <li>Gulf Coast utility <span class="tag simulated">Simulated</span></li>
-        </ul>
-        <p class="phase-note" data-mode-next="outage" hidden>These layers arrive in the next build phase.</p>
+        <p class="radar-status" data-mode-next="outage" hidden><span id="outage-status">Loading current outages…</span></p>
+        <p class="phase-note" data-mode-next="outage" hidden>Next: outage history, the storm risk index and the simulated Gulf Coast utility.</p>
       </aside>
 
       <calcite-loader id="map-loader" class="map-loader" label="Loading the map"></calcite-loader>
