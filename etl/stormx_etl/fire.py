@@ -27,7 +27,9 @@ from .common import feature_collection, fetch, write_json
 # CONUS plus a margin, as FIRMS wants it: west,south,east,north.
 CONUS_BBOX = "-125.5,24,-66,49.5"
 FIRMS_SOURCES = ("VIIRS_SNPP_NRT", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT", "MODIS_NRT")
-FIRMS_URL = "https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/{source}/{bbox}/1"
+# The day range counts UTC calendar days ending today, so 1 would be empty just after midnight UTC.
+# Ask for 2 and keep the last 24 hours.
+FIRMS_URL = "https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/{source}/{bbox}/2"
 HMS_URL = "https://satepsanone.nesdis.noaa.gov/pub/FIRE/web/HMS/Smoke_Polygons/Shapefile/{y}/{m:02d}/hms_smoke{y}{m:02d}{d:02d}.zip"
 
 # VIIRS reports confidence as l/n/h, MODIS as 0-100.
@@ -68,6 +70,12 @@ def parse_firms(text: str, source: str) -> list[dict[str, Any]]:
             }
         )
     return features
+
+
+def within_hours(features: list[dict[str, Any]], now: datetime, hours: int) -> list[dict[str, Any]]:
+    """Features acquired in the `hours` before `now`."""
+    cutoff = (now - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return [f for f in features if f["properties"]["acquired"] >= cutoff]
 
 
 def fetch_firms(key: str) -> list[dict[str, Any]]:
@@ -142,7 +150,7 @@ def main(out_dir: str) -> None:
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     key = os.environ.get("FIRMS_MAP_KEY", "")
     if key:
-        hotspots = fetch_firms(key)
+        hotspots = within_hours(fetch_firms(key), datetime.now(UTC), 24)
         write_json(out / "live/fire/firms.geojson", feature_collection(hotspots, updated=now, source="NASA FIRMS", hours=24))
         print(f"FIRMS: {len(hotspots)} hotspots")
     else:

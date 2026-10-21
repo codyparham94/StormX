@@ -1,8 +1,9 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 import shapefile
 
-from stormx_etl.fire import hms_time, modis_confidence, parse_firms, parse_hms
+from stormx_etl.fire import hms_time, modis_confidence, parse_firms, parse_hms, within_hours
 
 VIIRS_CSV = """latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,satellite,instrument,confidence,version,bright_ti5,frp,daynight
 34.12346,-118.54321,330.5,0.4,0.5,2026-10-20,905,N,VIIRS,h,2.0NRT,290.1,12.3,N
@@ -53,3 +54,12 @@ def test_parse_hms(tmp_path: Path):
     assert f["geometry"]["type"] == "Polygon"
     assert len(f["geometry"]["coordinates"][0]) == 5
     assert f["properties"] == {"density": "Heavy", "satellite": "GOES-EAST", "start": "2026-10-20T12:00:00Z", "end": "2026-10-20T15:00:00Z"}
+
+
+def test_within_hours_spans_midnight_utc():
+    def spot(acquired):
+        return {"properties": {"acquired": acquired}}
+
+    now = datetime(2026, 10, 21, 0, 34, tzinfo=UTC)
+    kept = within_hours([spot("2026-10-19T23:59:00Z"), spot("2026-10-20T00:40:00Z"), spot("2026-10-20T19:10:00Z")], now, 24)
+    assert [f["properties"]["acquired"] for f in kept] == ["2026-10-20T00:40:00Z", "2026-10-20T19:10:00Z"]
